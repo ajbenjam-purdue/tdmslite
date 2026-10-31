@@ -96,8 +96,17 @@ class Number:
     return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=8)
   
   @classmethod
+  def pack_i64(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=True, length=8)
+  
+  @classmethod
   def unpack_uint(cls, content:bytes, big_endian:bool=False) -> int:
     return int.from_bytes(content, 'big' if big_endian else 'little', signed=False)
+  
+  @classmethod
+  def unpack_int(cls, content:bytes, big_endian:bool=False) -> int:
+    return int.from_bytes(content, 'big' if big_endian else 'little', signed=True)
+
 class Timestamp:
 
   EPOCH = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc)
