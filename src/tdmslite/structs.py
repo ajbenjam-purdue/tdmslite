@@ -283,3 +283,6 @@ TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
   TDMSDataTypes.tdsTypeDoubleFloatWithUnit :  ('d', 8),
   TDMSDataTypes.tdsTypeBoolean :              ('b', 1)
 }
+
+type TDMSDataTypesArrayTypes = float | int
+type TDMSDataTypesListTypes  = str | datetime
