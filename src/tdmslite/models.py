@@ -131,12 +131,28 @@ class TDMSMetadata:
         properties[property_name] = property_value
       
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
-                
-class TDMSRawdata:
-  pass
 
 class TDMSChannel:
-  pass
+
+  def __init__(self, name:str, path:str, data_type:TDMSDataTypes|None=None) -> None:
+    self.name = name
+    self.path = path
+    self.data_type = data_type
+    self.properties:dict[str,TDMSMetadataObjectValue] = {}
+    self.data:array[TDMSDataTypesArrayTypes]|list[TDMSDataTypesListTypes] = []
+  
+  def __len__(self) -> int:
+    return len(self.data)
+
+class TDMSGroup:
+  def __init__(self, name: str) -> None:
+    self.name: str = name
+    self.properties: dict[str,TDMSMetadataObjectValue] = {}
+    self.channels: dict[str, TDMSChannel] = {}
+
+  def __getitem__(self, channel_name: str) -> TDMSChannel:
+    return self.channels[channel_name]
+
 
 class TDMSSegment:
     
