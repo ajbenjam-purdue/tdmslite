@@ -1,6 +1,7 @@
 from enum import Enum, IntEnum
 from typing import Iterable, Self
 from io import BytesIO
+import datetime
 
 class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
@@ -20,7 +21,7 @@ class TOCFlag(Enum):
   def pack(cls, flags:Iterable[TOCFlag]) -> int:
     return sum([flag.value for flag in flags])
 
-class TOCVersion(Enum):
+class TOCVersion(IntEnum):
   TDMS_2 = 4713
   TDMS_1 = 4712
   UNKNOWN = 0
@@ -97,3 +98,27 @@ class Number:
   @classmethod
   def unpack_uint(cls, content:bytes, big_endian:bool=False) -> int:
     return int.from_bytes(content, 'big' if big_endian else 'little', signed=False)
+class Timestamp:
+
+  EPOCH = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc)
+  TWO_POW_64 = 1 << 64
+
+  @classmethod
+  def from_bytes(cls, content: bytes, big_endian: bool) -> datetime.datetime:
+    fraction = Number.unpack_uint(content[0:8], big_endian=big_endian)
+    seconds = Number.unpack_int(content[8:16], big_endian=big_endian)
+    microseconds = round(fraction * 1_000_000 / cls.TWO_POW_64)
+
+    return cls.EPOCH + datetime.timedelta(seconds=seconds, microseconds=microseconds)
+
+  @classmethod
+  def to_bytes(cls, dt: datetime.datetime, big_endian: bool) -> bytes:
+    delta = dt.astimezone(datetime.timezone.utc) - cls.EPOCH
+    
+    # int seconds elapsed
+    seconds = delta.days * 86400 + delta.seconds
+    fraction = (delta.microseconds * cls.TWO_POW_64) // 1_000_000
+
+    content_0_8 = Number.pack_u64(fraction, big_endian=big_endian)
+    content_8_16 = Number.pack_i64(seconds, big_endian=big_endian)
+    return content_0_8 + content_8_16
