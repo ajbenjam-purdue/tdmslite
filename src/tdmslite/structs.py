@@ -139,7 +139,7 @@ class Number:
     return struct.unpack(('>' if big_endian else '<')+'d', content)[0]
   
   @classmethod
-  def unpack_efloat(cls, content: bytes, big_endian: bool = False) -> float:
+  def unpack_efloat(cls, content:bytes, big_endian:bool=False) -> float:
     
     # https://en.wikipedia.org/wiki/Extended_precision
     
@@ -179,6 +179,16 @@ class Number:
       return ldexp(sign * frac, exponent)
     except:
       return inf if sign > 0 else -inf
+
+  @classmethod
+  def unpack_fixed(cls, content:bytes, word_length:int, int_word_length:int, signed:bool, big_endian:bool=False) -> float:
+    integer = cls.unpack_int(content=content, big_endian=big_endian)
+    
+    fraction = word_length - int_word_length
+    if signed and (integer & (1 << (word_length - 1))):
+      integer -= (1 << word_length)
+    
+    return integer / (2 ** fraction)
 
 class Boolean:
   
