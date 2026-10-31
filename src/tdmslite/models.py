@@ -25,10 +25,17 @@ class TDMSLeadIn:
         return
     
     # Load data
-    self.big_endian = TOCFlag.kTocBigEndian in TOCFlag.members(stream.read(4))
+    members:list[TOCFlag] = TOCFlag.members(stream.read(4))
     self.version = TOCVersion(Number.unpack_uint(stream.read(4), self.big_endian))
     self.next_segment = Number.unpack_uint(stream.read(8), self.big_endian)
     self.raw_data_offset = Number.unpack_uint(stream.read(8), self.big_endian)
+    
+    # Get relevant flags
+    self.big_endian = TOCFlag.kTocBigEndian in members
+    self.interleaved = TOCFlag.kTocInterleavedData in members
+    self.has_metadata = TOCFlag.kTocMetaData in members
+    self.has_rawdata = TOCFlag.kTocRawData in members
+    # Not sure on kTocNewObjList or kTocDAQmxRawData
     
     # Data checks
     if self.version == TOCVersion.UNKNOWN:
@@ -101,21 +108,15 @@ class TDMSMetadata:
             property_value = Number.unpack_int(stream.read(8), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeU64:
             property_value = Number.unpack_uint(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeSingleFloat:
-            property_value = Number.unpack_sfloat(stream.read(4), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeSingleFloatWithUnit: # same as the unitless float
+          case TDMSDataTypes.tdsTypeSingleFloat | TDMSDataTypes.tdsTypeSingleFloatWithUnit:
             property_value = Number.unpack_sfloat(stream.read(4), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeComplexSingleFloat:
             property_value = Number.unpack_csfloat(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeDoubleFloat:
-            property_value = Number.unpack_dfloat(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeDoubleFloatWithUnit: # same as the unitless double
+          case TDMSDataTypes.tdsTypeDoubleFloat | TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
             property_value = Number.unpack_dfloat(stream.read(8), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeComplexDoubleFloat:
             property_value = Number.unpack_cdfloat(stream.read(16), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeExtendedFloat:
-            property_value = Number.unpack_efloat(stream.read(10), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeExtendedFloatWithUnit: # same as the unitless efloat
+          case TDMSDataTypes.tdsTypeExtendedFloat | TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
             property_value = Number.unpack_efloat(stream.read(10), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeTimeStamp:
             property_value = Timestamp.from_bytes(stream.read(16), big_endian=big_endian)
@@ -129,22 +130,29 @@ class TDMSMetadata:
       
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
                 
-            
+class TDMSRawdata:
+  pass
 
 class TDMSChannel:
-    pass
+  pass
 
 class TDMSSegment:
     
   def __init__(self, stream:BytesIO) -> None:
-    self.stream = stream
+    self.stream:BytesIO = stream
+    self.stream_begin:int = self.stream.tell()
+    
+    self.metadata:None|TDMSMetadata = None
+    self.rawdata:None|TDMSRawdata = None
+    
+    # Read lead-in and metadata
     self.lead_in = TDMSLeadIn(self.stream)
-    self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, {})
+    if self.lead_in.has_metadata:
+      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, {})
+      self.metadata.objects
+    if self.lead_in.has_rawdata:
+      self.stream.seek(self.stream_begin + 28 + self.lead_in.raw_data_offset)
+      self.rawdata = TDMSRawdata()
 
 class TDMSDocument:
   pass
-
-
-# stream = BytesIO(b'TDSm\x0E\x00\x00\x00\x69\x12\x00\x00\xE6\x00\x00\x00\x00\x00\x00\x00\xDE\x00\x00\x00\x00\x00\x00\x00')
-# x = TDMSLeadIn(stream)
-# print(x.big_endian, x.version, x.next_segment, x.raw_data_offset)

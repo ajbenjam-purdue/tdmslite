@@ -78,7 +78,7 @@ type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
 
 @dataclass
 class TDMSMetadataObject:
-  path: str
+  path:       str
   raw_layout: TDMSRawDataLayout | None = None
   properties: dict[str, TDMSMetadataObjectValue] = \
     field(default_factory=dict[str, TDMSMetadataObjectValue])
@@ -98,6 +98,35 @@ class String:
     # see String.pack
     str_length = Number.unpack_uint(stream.read(4), big_endian=big_endian)
     return stream.read(str_length).decode('utf-8')
+  
+  @classmethod
+  def parse_path(cls, path:str) -> tuple[str|None, str|None]:
+    if path == "/": return (None, None)
+    
+    escaped, skip = False, False
+    current:list[str] = []
+    parts:list[str] = []
+    
+    for i, char in enumerate(path):
+      
+      if skip: 
+        skip = False
+        continue
+      
+      if char == "'": # Escape char
+        if escaped and i + 1 < len(path) and path[i+1] == "'":
+          current.append("'") # Doubled quotation to embed a '
+          skip = True
+        
+        else:
+          escaped = not escaped
+          if not escaped:
+            parts.append("".join(current))
+            current = []
+            
+      elif escaped: current.append(char) # Valid char
+    
+    return (parts[0] if len(parts) > 0 else None, parts[1] if len(parts) > 1 else None)      
 
 class Number:
   
@@ -208,7 +237,6 @@ class Number:
     
     return real + imag * 1j
   
-
 class Boolean:
   
   @classmethod
@@ -239,3 +267,21 @@ class Timestamp:
     content_0_8 = Number.pack_u64(fraction, big_endian=big_endian)
     content_8_16 = Number.pack_i64(seconds, big_endian=big_endian)
     return content_0_8 + content_8_16
+
+TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
+  TDMSDataTypes.tdsTypeI8 :                   ('b', 1),
+  TDMSDataTypes.tdsTypeU8 :                   ('B', 1),
+  TDMSDataTypes.tdsTypeI16 :                  ('h', 2),
+  TDMSDataTypes.tdsTypeU16 :                  ('H', 2),
+  TDMSDataTypes.tdsTypeI32 :                  ('i', 4),
+  TDMSDataTypes.tdsTypeU32 :                  ('I', 4),
+  TDMSDataTypes.tdsTypeI64 :                  ('q', 8),
+  TDMSDataTypes.tdsTypeU64 :                  ('Q', 8),
+  TDMSDataTypes.tdsTypeSingleFloat :          ('f', 4),
+  TDMSDataTypes.tdsTypeSingleFloatWithUnit :  ('f', 4),
+  TDMSDataTypes.tdsTypeComplexSingleFloat :   ('Zf', 8),
+  TDMSDataTypes.tdsTypeDoubleFloat :          ('d', 8),
+  TDMSDataTypes.tdsTypeDoubleFloatWithUnit :  ('d', 8),
+  TDMSDataTypes.tdsTypeComplexDoubleFloat :   ('Zd', 16),
+  TDMSDataTypes.tdsTypeBoolean :              ('b', 1)
+}
