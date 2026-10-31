@@ -10,9 +10,9 @@ class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
   kTocNewObjList      = 0x00000004
   kTocRawData         = 0x00000008
-  kTocDAQmxRawData    = 0x00000020
-  kTocInterleavedData = 0x00000040
-  kTocBigEndian       = 0x00000080
+  kTocDAQmxRawData    = 0x00000080
+  kTocInterleavedData = 0x00000020
+  kTocBigEndian       = 0x00000040
 
   @classmethod
   def members(cls, value:int|bytes) -> list[TOCFlag]:
@@ -279,9 +279,7 @@ TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
   TDMSDataTypes.tdsTypeU64 :                  ('Q', 8),
   TDMSDataTypes.tdsTypeSingleFloat :          ('f', 4),
   TDMSDataTypes.tdsTypeSingleFloatWithUnit :  ('f', 4),
-  TDMSDataTypes.tdsTypeComplexSingleFloat :   ('Zf', 8),
   TDMSDataTypes.tdsTypeDoubleFloat :          ('d', 8),
   TDMSDataTypes.tdsTypeDoubleFloatWithUnit :  ('d', 8),
-  TDMSDataTypes.tdsTypeComplexDoubleFloat :   ('Zd', 16),
   TDMSDataTypes.tdsTypeBoolean :              ('b', 1)
 }
