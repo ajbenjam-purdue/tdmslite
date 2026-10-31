@@ -3,6 +3,7 @@ from typing import Iterable, Self
 from dataclasses import dataclass, field
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
+from math import nan, inf
 import struct
 
 class TOCFlag(Enum):
@@ -136,6 +137,44 @@ class Number:
   @classmethod
   def unpack_dfloat(cls, content:bytes, big_endian:bool=False) -> float:
     return struct.unpack(('>' if big_endian else '<')+'d', content)[0]
+  
+  @classmethod
+  def unpack_efloat(cls, content: bytes, big_endian: bool = False) -> float:
+    
+    # https://en.wikipedia.org/wiki/Extended_precision
+    
+    if len(content) != 10:
+      raise ValueError(f"Incorrect number of bytes ({len(content)}) provided to unpack_efloat (reqd: 10)")
+    
+    if big_endian:
+      biased_exp, mantissa = struct.unpack('>HQ', content)
+    else:
+      mantissa, biased_exp = struct.unpack('<QH', content)
+      
+    sign = -1.0 if biased_exp & 0x8000 else 1.0
+    exponent = biased_exp & 0x7FFF
+    
+    # inf/nan
+    if exponent == 0x7FFF:
+      
+      # lower 63 bits are set or bit 63 is 0
+      if (mantissa & 0x7FFFFFFFFFFFFFFF) or not (mantissa & 0x8000000000000000):
+        return nan
+      
+      return inf if sign > 0 else -inf
+    
+    # Zero check
+    if exponent == 0 and mantissa == 0: 
+      return sign * 0.0
+    
+    if exponent == 0:
+      # Subnormal numbers
+      exponent = -16382
+    else:
+      # Normal numbers
+      exponent -= 16383
+    
+    return sign * (mantissa / (2 ** 63)) * (2 ** exponent)
 
 class Boolean:
   

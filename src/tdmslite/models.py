@@ -105,6 +105,8 @@ class TDMSMetadata:
             property_value = Number.unpack_sfloat(stream.read(4), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeDoubleFloat:
             property_value = Number.unpack_dfloat(stream.read(8), big_endian=big_endian)
+          case TDMSDataTypes.tdsTypeExtendedFloat:
+            property_value = Number.unpack_efloat(stream.read(10), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeTimeStamp:
             property_value = Timestamp.from_bytes(stream.read(16), big_endian=big_endian)
           case _:
