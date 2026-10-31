@@ -78,6 +78,7 @@ class TDMSMetadata:
         
         raw_layout = TDMSRawDataLayout(raw_data_type, dim, n_values, total_size)
       
+      if raw_layout: channel_states[object_path] = raw_layout
       n_properties = Number.unpack_uint(stream.read(4), big_endian=big_endian)
       properties:dict[str, TDMSMetadataObjectValue] = {}
       
@@ -129,7 +130,6 @@ class TDMSMetadata:
         print(f"Property value: {property_value}")
         properties[property_name] = property_value
       
-      self.layout = raw_layout
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
                 
 class TDMSRawdata:
