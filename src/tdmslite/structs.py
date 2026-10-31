@@ -111,6 +111,10 @@ class Number:
     return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=4)
   
   @classmethod
+  def pack_i32(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=True, length=4)
+  
+  @classmethod
   def pack_u64(cls, content:int, big_endian:bool=False) -> bytes:
     return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=8)
   
@@ -189,6 +193,21 @@ class Number:
       integer -= (1 << word_length)
     
     return integer / (2 ** fraction)
+
+  @classmethod
+  def unpack_csfloat(cls, content:bytes, big_endian:bool=False) -> complex:
+    real = cls.unpack_sfloat(content[0:4], big_endian=big_endian)
+    imag = cls.unpack_sfloat(content[4:8], big_endian=big_endian)
+    
+    return real + imag * 1j
+  
+  @classmethod
+  def unpack_cdfloat(cls, content:bytes, big_endian:bool=False) -> complex:
+    real = cls.unpack_dfloat(content[0:8], big_endian=big_endian)
+    imag = cls.unpack_dfloat(content[8:16], big_endian=big_endian)
+    
+    return real + imag * 1j
+  
 
 class Boolean:
   
