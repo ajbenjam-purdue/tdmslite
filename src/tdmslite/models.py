@@ -1,9 +1,12 @@
 from io import BytesIO
+from array import array
 from structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, Boolean, \
-  TDMSMetadataObjectValue, Timestamp
+  TDMSMetadataObjectValue, Timestamp, TDMSDataTypesArrayMap, \
+  TDMSDataTypesArrayTypes, TDMSDataTypesListTypes
 from logging import getLogger
+from sys import byteorder as SYSTEM_BYTEORDER
 
 logger = getLogger(__name__)
 
