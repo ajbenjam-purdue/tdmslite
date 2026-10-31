@@ -26,15 +26,13 @@ class TDMSLeadIn:
     
     # Load data
     members:list[TOCFlag] = TOCFlag.members(stream.read(4))
-    self.version = TOCVersion(Number.unpack_uint(stream.read(4), self.big_endian))
-    self.next_segment = Number.unpack_uint(stream.read(8), self.big_endian)
-    self.raw_data_offset = Number.unpack_uint(stream.read(8), self.big_endian)
-    
-    # Get relevant flags
     self.big_endian = TOCFlag.kTocBigEndian in members
     self.interleaved = TOCFlag.kTocInterleavedData in members
     self.has_metadata = TOCFlag.kTocMetaData in members
     self.has_rawdata = TOCFlag.kTocRawData in members
+    self.version = TOCVersion(Number.unpack_uint(stream.read(4), self.big_endian))
+    self.next_segment = Number.unpack_uint(stream.read(8), self.big_endian)
+    self.raw_data_offset = Number.unpack_uint(stream.read(8), self.big_endian)
     # Not sure on kTocNewObjList or kTocDAQmxRawData
     
     # Data checks
@@ -128,6 +126,7 @@ class TDMSMetadata:
         print(f"Property value: {property_value}")
         properties[property_name] = property_value
       
+      self.layout = raw_layout
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
                 
 class TDMSRawdata:
@@ -138,8 +137,9 @@ class TDMSChannel:
 
 class TDMSSegment:
     
-  def __init__(self, stream:BytesIO) -> None:
+  def __init__(self, stream:BytesIO, previous_layout:dict[str, TDMSRawDataLayout], objects:list[TDMSMetadataObject]) -> None:
     self.stream:BytesIO = stream
+    self.metadataobjects = objects
     self.stream_begin:int = self.stream.tell()
     
     self.metadata:None|TDMSMetadata = None
@@ -148,8 +148,8 @@ class TDMSSegment:
     # Read lead-in and metadata
     self.lead_in = TDMSLeadIn(self.stream)
     if self.lead_in.has_metadata:
-      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, {})
-      self.metadata.objects
+      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, previous_layout)
+      self.metadataobjects = self.metadata.objects
     if self.lead_in.has_rawdata:
       self.stream.seek(self.stream_begin + 28 + self.lead_in.raw_data_offset)
       self.rawdata = TDMSRawdata()
