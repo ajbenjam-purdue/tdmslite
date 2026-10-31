@@ -3,7 +3,7 @@ from typing import Iterable, Self
 from dataclasses import dataclass, field
 from io import BytesIO
 from datetime import datetime, timezone, timedelta
-from math import nan, inf
+from math import nan, inf, ldexp
 import struct
 
 class TOCFlag(Enum):
@@ -174,7 +174,11 @@ class Number:
       # Normal numbers
       exponent -= 16383
     
-    return sign * (mantissa / (2 ** 63)) * (2 ** exponent)
+    frac = mantissa / (1 << 63)
+    try:
+      return ldexp(sign * frac, exponent)
+    except:
+      return inf if sign > 0 else -inf
 
 class Boolean:
   
