@@ -115,6 +115,8 @@ class TDMSMetadata:
             property_value = Number.unpack_efloat(stream.read(10), big_endian=big_endian)
           case TDMSDataTypes.tdsTypeTimeStamp:
             property_value = Timestamp.from_bytes(stream.read(16), big_endian=big_endian)
+          case TDMSDataTypes.tdsTypeFixedPoint:
+            raise NotImplementedError("Fixed point values are not supported by NI in TDMS")
           case _:
             raise NotImplementedError(f"Type {property_type} has not yet been added")
         
