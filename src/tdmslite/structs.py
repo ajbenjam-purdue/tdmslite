@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Iterable
+from typing import Iterable, Self
 
 class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
@@ -27,6 +27,14 @@ class TOCVersion(Enum):
   @classmethod
   def _missing_(cls, value: object) -> TOCVersion:
     return TOCVersion.UNKNOWN
+
+class TDMSLeadInIntegrity(Enum):
+  OK    = 0 # good
+  WARN  = 1 # suspicious
+  ERROR = 2 # block loading
+  
+  def __or__(self: Self, value: TDMSLeadInIntegrity) -> TDMSLeadInIntegrity:
+    return self if self.value > value.value else value
 
 class String:
   
