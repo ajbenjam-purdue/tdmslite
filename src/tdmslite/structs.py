@@ -1,7 +1,9 @@
 from enum import Enum, IntEnum
 from typing import Iterable, Self
+from dataclasses import dataclass, field
 from io import BytesIO
-import datetime
+from datetime import datetime, timezone, timedelta
+import struct
 
 class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
@@ -64,6 +66,22 @@ class TDMSDataTypes(IntEnum):
   tdsTypeComplexDoubleFloat = 0x10000D
   tdsTypeDAQmxRawData = 0xFFFFFFFF
 
+@dataclass
+class TDMSRawDataLayout:
+  data_type:  TDMSDataTypes
+  dim:        int
+  n_vals:     int
+  total_bytes:int
+
+type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
+
+@dataclass
+class TDMSMetadataObject:
+  path: str
+  raw_layout: TDMSRawDataLayout | None = None
+  properties: dict[str, TDMSMetadataObjectValue] = \
+    field(default_factory=dict[str, TDMSMetadataObjectValue])
+
 class String:
   
   @classmethod
@@ -106,23 +124,41 @@ class Number:
   @classmethod
   def unpack_int(cls, content:bytes, big_endian:bool=False) -> int:
     return int.from_bytes(content, 'big' if big_endian else 'little', signed=True)
+  
+  @classmethod
+  def unpack_hfloat(cls, content:bytes, big_endian:bool=False) -> float:
+    return struct.unpack(('>' if big_endian else '<')+'e', content)[0]
+  
+  @classmethod
+  def unpack_sfloat(cls, content:bytes, big_endian:bool=False) -> float:
+    return struct.unpack(('>' if big_endian else '<')+'f', content)[0]
+  
+  @classmethod
+  def unpack_dfloat(cls, content:bytes, big_endian:bool=False) -> float:
+    return struct.unpack(('>' if big_endian else '<')+'d', content)[0]
+
+class Boolean:
+  
+  @classmethod
+  def unpack(cls, stream:BytesIO) -> bool:
+    return stream.read(1) == b'\x01'
 
 class Timestamp:
 
-  EPOCH = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc)
+  EPOCH = datetime(1904, 1, 1, tzinfo=timezone.utc)
   TWO_POW_64 = 1 << 64
 
   @classmethod
-  def from_bytes(cls, content: bytes, big_endian: bool) -> datetime.datetime:
+  def from_bytes(cls, content: bytes, big_endian: bool) -> datetime:
     fraction = Number.unpack_uint(content[0:8], big_endian=big_endian)
     seconds = Number.unpack_int(content[8:16], big_endian=big_endian)
     microseconds = round(fraction * 1_000_000 / cls.TWO_POW_64)
 
-    return cls.EPOCH + datetime.timedelta(seconds=seconds, microseconds=microseconds)
+    return cls.EPOCH + timedelta(seconds=seconds, microseconds=microseconds)
 
   @classmethod
-  def to_bytes(cls, dt: datetime.datetime, big_endian: bool) -> bytes:
-    delta = dt.astimezone(datetime.timezone.utc) - cls.EPOCH
+  def to_bytes(cls, dt: datetime, big_endian: bool) -> bytes:
+    delta = dt.astimezone(timezone.utc) - cls.EPOCH
     
     # int seconds elapsed
     seconds = delta.days * 86400 + delta.seconds
