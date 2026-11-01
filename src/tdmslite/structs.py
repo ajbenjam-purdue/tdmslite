@@ -5,6 +5,10 @@ from datetime import datetime, timezone, timedelta
 from math import nan, inf, ldexp
 import struct
 
+type TDMSDataTypesArrayTypes = float | int
+type TDMSDataTypesListTypes  = str | datetime | bool
+type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
+
 class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
   kTocNewObjList      = 0x00000004
@@ -65,6 +69,45 @@ class TDMSDataTypes(IntEnum):
   tdsTypeComplexSingleFloat = 0x08000C
   tdsTypeComplexDoubleFloat = 0x10000D
   tdsTypeDAQmxRawData = 0xFFFFFFFF
+  
+  def unpack(self, stream:BinaryIO, big_endian:bool) -> TDMSMetadataObjectValue:
+    match self:
+      case TDMSDataTypes.tdsTypeString:
+        return(String.unpack(stream, big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeBoolean:
+        return(Boolean.unpack(stream))
+      case TDMSDataTypes.tdsTypeI8:
+        return(Number.unpack_int(stream.read(1), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeU8:
+        return(Number.unpack_uint(stream.read(1), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeI16:
+        return(Number.unpack_int(stream.read(2), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeU16:
+        return(Number.unpack_uint(stream.read(2), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeI32:
+        return(Number.unpack_int(stream.read(4), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeU32:
+        return(Number.unpack_uint(stream.read(4), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeI64:
+        return(Number.unpack_int(stream.read(8), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeU64:
+        return(Number.unpack_uint(stream.read(8), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeSingleFloat | TDMSDataTypes.tdsTypeSingleFloatWithUnit:
+        return(Number.unpack_sfloat(stream.read(4), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeComplexSingleFloat:
+        return(Number.unpack_csfloat(stream.read(8), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeDoubleFloat | TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
+        return(Number.unpack_dfloat(stream.read(8), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeComplexDoubleFloat:
+        return(Number.unpack_cdfloat(stream.read(16), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeExtendedFloat | TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
+        return(Number.unpack_efloat(stream.read(10), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeTimeStamp:
+        return(Timestamp.from_bytes(stream.read(16), big_endian=big_endian))
+      case TDMSDataTypes.tdsTypeFixedPoint:
+        raise NotImplementedError("Fixed point values are not supported by NI in TDMS")
+      case _:
+        raise NotImplementedError(f"Type {self} has not yet been added")
 
 @dataclass
 class TDMSRawDataLayout:
@@ -72,8 +115,6 @@ class TDMSRawDataLayout:
   dim:        int
   n_vals:     int
   total_bytes:int
-
-type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
 
 @dataclass
 class TDMSMetadataObject:
@@ -235,7 +276,7 @@ class Number:
     imag = cls.unpack_dfloat(content[8:16], big_endian=big_endian)
     
     return real + imag * 1j
-  
+
 class Boolean:
   
   @classmethod
@@ -282,6 +323,3 @@ TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
   TDMSDataTypes.tdsTypeDoubleFloatWithUnit :  ('d', 8),
   TDMSDataTypes.tdsTypeBoolean :              ('b', 1)
 }
-
-type TDMSDataTypesArrayTypes = float | int
-type TDMSDataTypesListTypes  = str | datetime | bool
