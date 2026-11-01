@@ -487,6 +487,38 @@ class Number:
         raise IndexError(f"Index {index} out of bounds for length {len(self)}")
       return complex(self._raw[2 * index], self._raw[2 * index + 1])
 
+  class ExtendedFloatArray(TDMSArray):
+    ITEM_SIZE_BYTES = 10
+
+    def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeExtendedFloat,
+    raw: bytearray | None = None, big_endian: bool = False) -> None:
+      self.data_type = data_type
+      self.big_endian = big_endian
+      self._raw: bytearray = raw if raw is not None else bytearray()
+
+    def extend_from_bytes(self, data: bytes | bytearray, big_endian: bool) -> None:
+      self.big_endian = big_endian
+      self._raw.extend(data)
+
+    def extend(self, other: TDMSArray) -> None:
+      if not isinstance(other, Number.ExtendedFloatArray):
+        raise TypeError(f"Cannot extend {self} with {other}")
+      self._raw.extend(other._raw)
+
+    def __len__(self) -> int:
+      return len(self._raw) // self.ITEM_SIZE_BYTES
+
+    def __getitem__(self, index: int | slice) -> float | list[float]:
+      if isinstance(index, slice):
+        return [self[i] for i in range(*index.indices(len(self)))] # type: ignore
+      if index < 0:
+        index += len(self)
+      if index < 0 or index >= len(self):
+        raise IndexError(f"Index {index} out of bounds for length {len(self)}")
+      offset = index * self.ITEM_SIZE_BYTES
+      return Number.unpack_efloat(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
+        big_endian=self.big_endian)
+
 class Boolean:
   
   @classmethod
