@@ -160,10 +160,13 @@ class TDMSSegment:
     # Rawdata
     self.raw_chunks: dict[str, array[TDMSDataTypesArrayTypes] | list[TDMSDataTypesListTypes]] = {}
     if self.lead_in.has_rawdata:
+      
       self.stream.seek(self.start_pos + 28 + self.lead_in.raw_data_offset)
-      self._read_raw_data()
+      total_bytes_read:int = self._read_raw_data()
+      logger.info(f"Read {total_bytes_read} bytes of raw data")
 
-  def _read_raw_data(self) -> None:
+  def _read_raw_data(self) -> int:
+    total_read_bytes:int = 0
     for obj in self.objects:
       if not obj.raw_layout or obj.raw_layout.n_vals == 0:
         continue
@@ -175,6 +178,7 @@ class TDMSSegment:
         typecode, itemsize = TDMSDataTypesArrayMap[dtype]
         n_bytes = layout.n_vals * itemsize
         raw_bytes = self.stream.read(n_bytes)
+        total_read_bytes += n_bytes
 
         arr:array[TDMSDataTypesArrayTypes] = array(typecode)
         arr.frombytes(raw_bytes)
@@ -185,8 +189,21 @@ class TDMSSegment:
 
         self.raw_chunks[obj.path] = arr
       else:
-        # Handle non-primitive types (strings, timestamps, etc.) if applicable
-        pass
+        offsets = [Number.unpack_uint(self.stream.read(4), self.lead_in.big_endian) for _ in range(layout.n_vals)]
+
+        # Read chars
+        data_len = layout.total_bytes - (layout.n_vals * 4)
+        char_bytes = self.stream.read(data_len)
+        total_read_bytes += data_len
+        
+        strings: list[TDMSDataTypesListTypes] = []
+        prev_offset = 0
+        for off in offsets:
+            strings.append(char_bytes[prev_offset:off].decode('utf-8', errors='replace'))
+            prev_offset = off
+
+        self.raw_chunks[obj.path] = strings
+    return total_read_bytes
 
 class TDMSDocument:
   def __init__(self, stream: BinaryIO) -> None:
