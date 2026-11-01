@@ -519,11 +519,39 @@ class Number:
       return Number.unpack_efloat(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
+
+# Bool container
 class Boolean:
   
   @classmethod
   def unpack(cls, stream:BinaryIO) -> bool:
     return stream.read(1) == b'\x01'
+  
+  class BooleanArray(TDMSArray):
+    def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeBoolean, raw:
+    bytearray | None = None) -> None:
+        self.data_type = data_type
+        self._raw: bytearray = raw if raw is not None else bytearray()
+
+    def extend_from_bytes(self, data: bytes | bytearray) -> None:
+        self._raw.extend(data)
+
+    def extend(self, other: TDMSArray) -> None:
+      if not isinstance(other, Boolean.BooleanArray):
+        raise TypeError(f"Cannot extend {self} with {other}")
+      self._raw.extend(other._raw)
+
+    def __len__(self) -> int:
+      return len(self._raw)
+
+    def __getitem__(self, index: int | slice) -> bool | list[bool]:
+      if isinstance(index, slice):
+        return [bool(x) for x in self._raw[index]]
+      return bool(self._raw[index])
+
+    def __iter__(self) -> Iterator[bool]:
+      for b in self._raw:
+        yield bool(b)
 
 class Timestamp:
 
