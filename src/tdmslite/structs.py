@@ -110,6 +110,37 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
+  def array_state(self) -> tuple[str, int] | None:
+    match self:
+      case TDMSDataTypes.tdsTypeI8:
+        return ('b', 1)
+      case TDMSDataTypes.tdsTypeU8:
+        return ('B', 1)
+      case TDMSDataTypes.tdsTypeI16:
+        return ('h', 2)
+      case TDMSDataTypes.tdsTypeU16:
+        return ('H', 2)
+      case TDMSDataTypes.tdsTypeI32:
+        return ('i', 4)
+      case TDMSDataTypes.tdsTypeU32:
+        return ('I', 4)
+      case TDMSDataTypes.tdsTypeI64:
+        return ('q', 8)
+      case TDMSDataTypes.tdsTypeU64:
+        return ('Q', 8)
+      case TDMSDataTypes.tdsTypeSingleFloat:
+        return ('f', 4)
+      case TDMSDataTypes.tdsTypeSingleFloatWithUnit:
+        return ('f', 4)
+      case TDMSDataTypes.tdsTypeDoubleFloat:
+        return ('d', 8)
+      case TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
+        return ('d', 8)
+      case TDMSDataTypes.tdsTypeBoolean:
+        return ('b', 1)
+      case _:
+        return None
+
 @dataclass
 class TDMSRawDataLayout:
   data_type:  TDMSDataTypes
@@ -308,19 +339,3 @@ class Timestamp:
     content_0_8 = Number.pack_u64(fraction, big_endian=big_endian)
     content_8_16 = Number.pack_i64(seconds, big_endian=big_endian)
     return content_0_8 + content_8_16
-
-TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
-  TDMSDataTypes.tdsTypeI8 :                   ('b', 1),
-  TDMSDataTypes.tdsTypeU8 :                   ('B', 1),
-  TDMSDataTypes.tdsTypeI16 :                  ('h', 2),
-  TDMSDataTypes.tdsTypeU16 :                  ('H', 2),
-  TDMSDataTypes.tdsTypeI32 :                  ('i', 4),
-  TDMSDataTypes.tdsTypeU32 :                  ('I', 4),
-  TDMSDataTypes.tdsTypeI64 :                  ('q', 8),
-  TDMSDataTypes.tdsTypeU64 :                  ('Q', 8),
-  TDMSDataTypes.tdsTypeSingleFloat :          ('f', 4),
-  TDMSDataTypes.tdsTypeSingleFloatWithUnit :  ('f', 4),
-  TDMSDataTypes.tdsTypeDoubleFloat :          ('d', 8),
-  TDMSDataTypes.tdsTypeDoubleFloatWithUnit :  ('d', 8),
-  TDMSDataTypes.tdsTypeBoolean :              ('b', 1)
-}

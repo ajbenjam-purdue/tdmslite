@@ -3,8 +3,8 @@ from array import array
 from structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
-  TDMSMetadataObjectValue, TDMSDataTypesArrayMap, \
-  TDMSDataTypesArrayTypes, TDMSDataTypesListTypes
+  TDMSMetadataObjectValue, TDMSDataTypesArrayTypes, \
+  TDMSDataTypesListTypes
 from logging import getLogger
 from sys import byteorder as SYSTEM_BYTEORDER
 
@@ -135,7 +135,6 @@ class TDMSGroup:
   def __getitem__(self, channel_name: str) -> TDMSChannel:
     return self.channels[channel_name]
 
-
 class TDMSSegment:
   
   def __init__(self, stream: BinaryIO, 
@@ -173,9 +172,10 @@ class TDMSSegment:
 
       layout = obj.raw_layout
       dtype = layout.data_type
-
-      if dtype in TDMSDataTypesArrayMap:
-        typecode, itemsize = TDMSDataTypesArrayMap[dtype]
+      arr_state = dtype.array_state()
+      
+      if arr_state:
+        typecode, itemsize = arr_state
         n_bytes = layout.n_vals * itemsize
         raw_bytes = self.stream.read(n_bytes)
         total_read_bytes += n_bytes
