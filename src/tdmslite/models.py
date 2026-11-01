@@ -1,5 +1,6 @@
 from typing import BinaryIO
 from array import array
+from pathlib import Path
 from structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
@@ -56,7 +57,6 @@ class TDMSLeadIn:
       logger.warning("Likely corrupted data in segment")
       self.integrity |= TDMSLeadInIntegrity.WARN
     
-        
 class TDMSMetadata:
 
   def __init__(self, stream:BinaryIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> None:
@@ -252,3 +252,16 @@ class TDMSDocument:
       if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
         break
       stream.seek(seg_start + 28 + segment.lead_in.next_segment)
+  
+  @classmethod
+  def from_file(cls, path:str|Path) -> TDMSDocument:
+    
+    path = Path(path).resolve()
+    if path.suffix.lower() != '.tdms':
+      raise ValueError(f"Unsupported filetype: {path.suffix} (should be .tdms)")
+    if not path.exists():
+      raise FileNotFoundError(f"File at path {path} does not exist")
+    
+    with open(Path(path).resolve(), 'rb') as f:
+      file = TDMSDocument(f)
+    return file
