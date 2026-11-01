@@ -1,9 +1,9 @@
-from io import BytesIO
+from typing import BinaryIO
 from array import array
 from structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
-  TDMSMetadataObject, TDMSRawDataLayout, Boolean, \
-  TDMSMetadataObjectValue, Timestamp, TDMSDataTypesArrayMap, \
+  TDMSMetadataObject, TDMSRawDataLayout, \
+  TDMSMetadataObjectValue, TDMSDataTypesArrayMap, \
   TDMSDataTypesArrayTypes, TDMSDataTypesListTypes
 from logging import getLogger
 from sys import byteorder as SYSTEM_BYTEORDER
@@ -11,7 +11,7 @@ from sys import byteorder as SYSTEM_BYTEORDER
 logger = getLogger(__name__)
 
 class TDMSLeadIn:
-  def __init__(self, stream:BytesIO) -> None:
+  def __init__(self, stream:BinaryIO) -> None:
       
     # Set defaults
     self.integrity:TDMSLeadInIntegrity = TDMSLeadInIntegrity.OK
@@ -22,9 +22,11 @@ class TDMSLeadIn:
     
     # Check header
     initial_position:int = stream.tell()
-    if stream.read(4) != b'TDSm':
+    magic_sequence:bytes = stream.read(4)
+    if magic_sequence != b'TDSm':
         stream.seek(initial_position)
         self.integrity = TDMSLeadInIntegrity.ERROR
+        logger.error(f"Invalid magic sequence (Lead-in started with {magic_sequence})")
         return
     
     # Load data
@@ -52,7 +54,7 @@ class TDMSLeadIn:
         
 class TDMSMetadata:
 
-  def __init__(self, stream:BytesIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> None:
+  def __init__(self, stream:BinaryIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> None:
     
     n_objects = Number.unpack_uint(stream.read(4), big_endian=big_endian)
     
@@ -87,47 +89,8 @@ class TDMSMetadata:
         property_name = String.unpack(stream, big_endian=big_endian)
         property_type = TDMSDataTypes(Number.unpack_uint(stream.read(4), big_endian=big_endian))
         
-        print(f"Identified property {property_name} of type {property_type}")
-        
-        match property_type:
-          case TDMSDataTypes.tdsTypeString:
-            property_value = String.unpack(stream, big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeBoolean:
-            property_value = Boolean.unpack(stream)
-          case TDMSDataTypes.tdsTypeI8:
-            property_value = Number.unpack_int(stream.read(1), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeU8:
-            property_value = Number.unpack_uint(stream.read(1), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeI16:
-            property_value = Number.unpack_int(stream.read(2), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeU16:
-            property_value = Number.unpack_uint(stream.read(2), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeI32:
-            property_value = Number.unpack_int(stream.read(4), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeU32:
-            property_value = Number.unpack_uint(stream.read(4), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeI64:
-            property_value = Number.unpack_int(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeU64:
-            property_value = Number.unpack_uint(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeSingleFloat | TDMSDataTypes.tdsTypeSingleFloatWithUnit:
-            property_value = Number.unpack_sfloat(stream.read(4), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeComplexSingleFloat:
-            property_value = Number.unpack_csfloat(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeDoubleFloat | TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
-            property_value = Number.unpack_dfloat(stream.read(8), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeComplexDoubleFloat:
-            property_value = Number.unpack_cdfloat(stream.read(16), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeExtendedFloat | TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
-            property_value = Number.unpack_efloat(stream.read(10), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeTimeStamp:
-            property_value = Timestamp.from_bytes(stream.read(16), big_endian=big_endian)
-          case TDMSDataTypes.tdsTypeFixedPoint:
-            raise NotImplementedError("Fixed point values are not supported by NI in TDMS")
-          case _:
-            raise NotImplementedError(f"Type {property_type} has not yet been added")
-        
-        print(f"Property value: {property_value}")
+        property_value = property_type.unpack(stream, big_endian=big_endian)
+        logger.info(f"Read Property(name=\"{property_name}\", type={property_type.name}, val={property_value})")
         properties[property_name] = property_value
       
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
@@ -155,23 +118,55 @@ class TDMSGroup:
 
 
 class TDMSSegment:
-    
-  def __init__(self, stream:BytesIO, previous_layout:dict[str, TDMSRawDataLayout], objects:list[TDMSMetadataObject]) -> None:
-    self.stream:BytesIO = stream
-    self.metadataobjects = objects
-    self.stream_begin:int = self.stream.tell()
-    
-    self.metadata:None|TDMSMetadata = None
-    self.rawdata:None|TDMSRawdata = None
-    
-    # Read lead-in and metadata
+  
+  def __init__(self, stream: BinaryIO, 
+               channel_states: dict[str, TDMSRawDataLayout], 
+               active_objects: list[TDMSMetadataObject]) -> None:
+    self.stream = stream
+    self.start_pos = stream.tell()
+
+    # Lead-in
     self.lead_in = TDMSLeadIn(self.stream)
+    if self.lead_in.integrity == TDMSLeadInIntegrity.ERROR: return
+
+    # Metadata
     if self.lead_in.has_metadata:
-      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, previous_layout)
-      self.metadataobjects = self.metadata.objects
+      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, channel_states)
+      self.objects = self.metadata.objects
+    else:
+      self.metadata = None
+      self.objects = active_objects # keep previous active objects
+
+    # Rawdata
+    self.raw_chunks: dict[str, array[TDMSDataTypesArrayTypes] | list[TDMSDataTypesListTypes]] = {}
     if self.lead_in.has_rawdata:
-      self.stream.seek(self.stream_begin + 28 + self.lead_in.raw_data_offset)
-      self.rawdata = TDMSRawdata()
+      self.stream.seek(self.start_pos + 28 + self.lead_in.raw_data_offset)
+      self._read_raw_data()
+
+  def _read_raw_data(self) -> None:
+    for obj in self.objects:
+      if not obj.raw_layout or obj.raw_layout.n_vals == 0:
+        continue
+
+      layout = obj.raw_layout
+      dtype = layout.data_type
+
+      if dtype in TDMSDataTypesArrayMap:
+        typecode, itemsize = TDMSDataTypesArrayMap[dtype]
+        n_bytes = layout.n_vals * itemsize
+        raw_bytes = self.stream.read(n_bytes)
+
+        arr:array[TDMSDataTypesArrayTypes] = array(typecode)
+        arr.frombytes(raw_bytes)
+
+        # Endian conversion if needed
+        if self.lead_in.big_endian != (SYSTEM_BYTEORDER == 'big'):
+          arr.byteswap()
+
+        self.raw_chunks[obj.path] = arr
+      else:
+        # Handle non-primitive types (strings, timestamps, etc.) if applicable
+        pass
 
 class TDMSDocument:
   pass
