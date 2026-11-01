@@ -104,6 +104,16 @@ class TDMSChannel:
     self.properties:dict[str,TDMSMetadataObjectValue] = {}
     self.data:array[TDMSDataTypesArrayTypes]|list[TDMSDataTypesListTypes] = []
   
+  def add_data(self, data:list[TDMSDataTypesListTypes]|array[TDMSDataTypesArrayTypes]) -> None:
+    if len(self.data) == 0:
+      self.data = data.copy() if isinstance(data, list) else data
+    else:
+      if isinstance(self.data, list) and isinstance(data, list):
+        self.data.extend(data)
+      elif isinstance(self.data, array) and isinstance(data, array):
+        if self.data.typecode == data.typecode:
+          self.data.extend(data)
+  
   def __len__(self) -> int:
     return len(self.data)
 
