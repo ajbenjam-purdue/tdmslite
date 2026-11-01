@@ -231,6 +231,8 @@ class TDMSArray(Sequence[Any], ABC):
     return f"{self.__class__.__name__}(data_type={self.data_type.name}, " \
       f"len={len(self)}, data=[{samples}{suffix}])"
 
+
+# String container
 class String:
   
   @classmethod
@@ -275,6 +277,26 @@ class String:
       elif escaped: current.append(char) # Valid char
     
     return (parts[0] if len(parts) > 0 else None, parts[1] if len(parts) > 1 else None)      
+
+  class StringArray(TDMSArray):
+    def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeString, strings:
+    list[str] | None = None) -> None:
+      self.data_type = data_type
+      self._strings: list[str] = strings if strings is not None else []
+
+    def extend(self, other: TDMSArray) -> None:
+      if not isinstance(other, String.StringArray):
+        raise TypeError(f"Cannot extend {self} with {other}")
+      self._strings.extend(other._strings)
+
+    def __len__(self) -> int:
+      return len(self._strings)
+
+    def __getitem__(self, index: int | slice) -> str | list[str]:
+      return self._strings[index]
+
+    def __iter__(self) -> Iterator[str]:
+      return iter(self._strings)
 
 class Number:
   
