@@ -298,6 +298,8 @@ class String:
     def __iter__(self) -> Iterator[str]:
       return iter(self._strings)
 
+
+# Numeric container
 class Number:
   
   max_u32_bytes:bytes = b'\xFF\xFF\xFF\xFF'
@@ -448,6 +450,48 @@ class Number:
     imag = cls.unpack_dfloat(content[8:16], big_endian=big_endian)
     
     return real + imag * 1j
+
+  class NumericArray(TDMSArray):
+    TYPECODES: dict[TDMSDataTypes, str] = {
+      TDMSDataTypes.tdsTypeI8: 'b',
+      TDMSDataTypes.tdsTypeU8: 'B',
+      TDMSDataTypes.tdsTypeI16: 'h',
+      TDMSDataTypes.tdsTypeU16: 'H',
+      TDMSDataTypes.tdsTypeI32: 'i',
+      TDMSDataTypes.tdsTypeU32: 'I',
+      TDMSDataTypes.tdsTypeI64: 'q',
+      TDMSDataTypes.tdsTypeU64: 'Q',
+      TDMSDataTypes.tdsTypeSingleFloat: 'f',
+      TDMSDataTypes.tdsTypeSingleFloatWithUnit: 'f',
+      TDMSDataTypes.tdsTypeDoubleFloat: 'd',
+      TDMSDataTypes.tdsTypeDoubleFloatWithUnit: 'd',
+    }
+    
+    def __init__(self, data_type: TDMSDataTypes, raw:array[float|int]|None=None) -> None:
+      self.data_type = data_type
+      self.typecode = self.TYPECODES[data_type]
+      self._raw:array[float|int] = raw if raw is not None else array(self.typecode)
+      
+    def extend_from_bytes(self, data:bytes|bytearray, big_endian:bool) -> None:
+      temp_arr:array[float|int] = array(self.typecode)
+      temp_arr.frombytes(data)
+      if big_endian != (SYSTEM_BYTEORDER == 'big'):
+        temp_arr.byteswap()
+      self._raw.extend(temp_arr)
+    
+    def extend(self, other: TDMSArray) -> None:
+      if not isinstance(other, Number.NumericArray) or other.typecode != self.typecode:
+        raise TypeError(f"Cannot extend {self} with {other} (incompatible type)")
+      self._raw.extend(other._raw)
+    
+    def __len__(self) -> int:
+      return len(self._raw)
+    
+    def __getitem__(self, index: int | slice[Any, Any, Any]) -> Any:
+      return self._raw[index]
+    
+    def __iter__(self) -> Iterator[Any]:
+      return iter(self._raw)
 
 class Boolean:
   
