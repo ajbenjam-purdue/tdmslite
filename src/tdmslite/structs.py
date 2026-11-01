@@ -37,9 +37,10 @@ class TOCVersion(IntEnum):
     return TOCVersion.UNKNOWN
 
 class TDMSLeadInIntegrity(Enum):
-  OK    = 0 # good
-  WARN  = 1 # suspicious
-  ERROR = 2 # block loading
+  DONE  = 0 # EOF
+  OK    = 1 # good
+  WARN  = 2 # suspicious
+  ERROR = 3 # block loading
   
   def __or__(self: Self, value: TDMSLeadInIntegrity) -> TDMSLeadInIntegrity:
     return self if self.value > value.value else value

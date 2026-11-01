@@ -23,11 +23,16 @@ class TDMSLeadIn:
     # Check header
     initial_position:int = stream.tell()
     magic_sequence:bytes = stream.read(4)
+    
+    if magic_sequence == b'':
+      stream.seek(initial_position)
+      self.integrity = TDMSLeadInIntegrity.DONE
+      return
     if magic_sequence != b'TDSm':
-        stream.seek(initial_position)
-        self.integrity = TDMSLeadInIntegrity.ERROR
-        logger.error(f"Invalid magic sequence (Lead-in started with {magic_sequence})")
-        return
+      stream.seek(initial_position)
+      self.integrity = TDMSLeadInIntegrity.ERROR
+      logger.error(f"Invalid magic sequence (Lead-in started with {magic_sequence})")
+      return
     
     # Load data
     members:list[TOCFlag] = TOCFlag.members(stream.read(4))
@@ -116,6 +121,10 @@ class TDMSChannel:
   
   def __len__(self) -> int:
     return len(self.data)
+  
+  def __repr__(self) -> str:
+    return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")}, data_type={self.data_type}, "
+            f"data={"None" if len(self) == 0 else len(self)})")
 
 class TDMSGroup:
   def __init__(self, name: str) -> None:
@@ -137,7 +146,8 @@ class TDMSSegment:
 
     # Lead-in
     self.lead_in = TDMSLeadIn(self.stream)
-    if self.lead_in.integrity == TDMSLeadInIntegrity.ERROR: return
+    if self.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
+     self.lead_in.integrity == TDMSLeadInIntegrity.DONE : return
 
     # Metadata
     if self.lead_in.has_metadata:
