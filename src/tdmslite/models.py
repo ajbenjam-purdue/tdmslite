@@ -120,6 +120,10 @@ class TDMSChannel:
       return self.data[key]
     raise IndexError(f"Channel {self.name} ({self.path}) has no data")
   
+  def __iter__(self) -> Generator[Any]:
+    if self.data:
+      yield from self.data
+  
   def __repr__(self) -> str:
     return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")},"\
       f" data_type={self.data_type}, data={"None" if len(self) == 0 else len(self)})")
@@ -132,6 +136,10 @@ class TDMSGroup:
 
   def __getitem__(self, channel_name: str) -> TDMSChannel:
     return self.channels[channel_name]
+
+  def __iter__(self) -> Generator[TDMSChannel]:
+    for channel in self.channels.values():
+      yield channel
 
   def __repr__(self) -> str:
     return f"Group(name={self.name}, " \
@@ -248,6 +256,10 @@ class TDMSDocument:
     if key in self.groups:
       return self.groups[key]
     return None
+
+  def __iter__(self) -> Generator[TDMSGroup]:
+    for group in self.groups.values():
+      yield group
 
   def __repr__(self) -> str:
     return f"TDMSDocument(Properties={self.properties}, " \
