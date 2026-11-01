@@ -1,7 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "TDMSlite"
-version = "2026.10.30"
+name = "tdmslite"
+version = "2026.10.31"
 description = "A lightweight python package to write to and read from National Instruments TDMS files with no external dependencies."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+license = "MIT"
+keywords = [
+  "tdms", "labview", 
+  "national-instruments", 
+  "ni", "measurement", 
+  "data"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Topic :: File Formats",
+  "Topic :: Scientific/Engineering",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
+  "Programming Language :: Python :: 3.16",
+  "Typing :: Typed"
+]
+
+[project.urls]
+Homepage = "https://github.com/ajben/TDMSlite"
+Repository = "https://github.com/ajben/TDMSlite"
