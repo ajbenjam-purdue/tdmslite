@@ -7,7 +7,7 @@ from .structs import TOCFlag, TOCVersion, Number, \
   TDMSMetadataObjectValue, TDMSDataTypesArrayTypes, \
   TDMSDataTypesListTypes
 from logging import getLogger
-from sys import byteorder as SYSTEM_BYTEORDER
+
 
 logger = getLogger(__name__)
 
@@ -177,37 +177,13 @@ class TDMSSegment:
 
       layout = obj.raw_layout
       dtype = layout.data_type
-      arr_state = dtype.array_state()
+      bytes_read, result = dtype.to_struct(
+        layout.n_vals, layout.total_bytes, self.stream, 
+        big_endian=self.lead_in.big_endian)
       
-      if arr_state:
-        typecode, itemsize = arr_state
-        n_bytes = layout.n_vals * itemsize
-        raw_bytes = self.stream.read(n_bytes)
-        total_read_bytes += n_bytes
-
-        arr:array[TDMSDataTypesArrayTypes] = array(typecode)
-        arr.frombytes(raw_bytes)
-
-        # Endian conversion if needed
-        if self.lead_in.big_endian != (SYSTEM_BYTEORDER == 'big'):
-          arr.byteswap()
-
-        self.raw_chunks[obj.path] = arr
-      else:
-        offsets = [Number.unpack_uint(self.stream.read(4), self.lead_in.big_endian) for _ in range(layout.n_vals)]
-
-        # Read chars
-        data_len = layout.total_bytes - (layout.n_vals * 4)
-        char_bytes = self.stream.read(data_len)
-        total_read_bytes += data_len
-        
-        strings: list[TDMSDataTypesListTypes] = []
-        prev_offset = 0
-        for off in offsets:
-            strings.append(char_bytes[prev_offset:off].decode('utf-8', errors='replace'))
-            prev_offset = off
-
-        self.raw_chunks[obj.path] = strings
+      self.raw_chunks[obj.path] = result
+      total_read_bytes += bytes_read
+      
     return total_read_bytes
 
 class TDMSDocument:
