@@ -1,7 +1,6 @@
 from enum import Enum, IntEnum
-from typing import Iterable, Self
+from typing import Iterable, Self, BinaryIO
 from dataclasses import dataclass, field
-from io import BytesIO
 from datetime import datetime, timezone, timedelta
 from math import nan, inf, ldexp
 import struct
@@ -93,7 +92,7 @@ class String:
     return len(content_stripped).to_bytes(length=4, byteorder='big' if big_endian else 'little') + content_stripped.encode('utf-8')
   
   @classmethod
-  def unpack(cls, stream:BytesIO, big_endian:bool=False) -> str:
+  def unpack(cls, stream:BinaryIO, big_endian:bool=False) -> str:
     
     # see String.pack
     str_length = Number.unpack_uint(stream.read(4), big_endian=big_endian)
@@ -240,7 +239,7 @@ class Number:
 class Boolean:
   
   @classmethod
-  def unpack(cls, stream:BytesIO) -> bool:
+  def unpack(cls, stream:BinaryIO) -> bool:
     return stream.read(1) == b'\x01'
 
 class Timestamp:
@@ -285,4 +284,4 @@ TDMSDataTypesArrayMap:dict[TDMSDataTypes, tuple[str, int]] = {
 }
 
 type TDMSDataTypesArrayTypes = float | int
-type TDMSDataTypesListTypes  = str | datetime
+type TDMSDataTypesListTypes  = str | datetime | bool
