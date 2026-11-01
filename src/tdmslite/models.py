@@ -6,7 +6,6 @@ from .structs import TOCFlag, TOCVersion, Number, \
   TDMSMetadataObjectValue, TDMSArray
 from logging import getLogger
 
-
 logger = getLogger(__name__)
 
 class TDMSLeadIn:

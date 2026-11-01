@@ -120,74 +120,6 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
-  def array_state(self) -> tuple[str, int] | None:
-    match self:
-      case TDMSDataTypes.tdsTypeI8:
-        return ('b', 1)
-      case TDMSDataTypes.tdsTypeU8:
-        return ('B', 1)
-      case TDMSDataTypes.tdsTypeI16:
-        return ('h', 2)
-      case TDMSDataTypes.tdsTypeU16:
-        return ('H', 2)
-      case TDMSDataTypes.tdsTypeI32:
-        return ('i', 4)
-      case TDMSDataTypes.tdsTypeU32:
-        return ('I', 4)
-      case TDMSDataTypes.tdsTypeI64:
-        return ('q', 8)
-      case TDMSDataTypes.tdsTypeU64:
-        return ('Q', 8)
-      case TDMSDataTypes.tdsTypeSingleFloat:
-        return ('f', 4)
-      case TDMSDataTypes.tdsTypeSingleFloatWithUnit:
-        return ('f', 4)
-      case TDMSDataTypes.tdsTypeDoubleFloat:
-        return ('d', 8)
-      case TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
-        return ('d', 8)
-      case TDMSDataTypes.tdsTypeBoolean:
-        return ('b', 1)
-      case _:
-        return None
-
-  def to_struct(self, values:int, total_bytes:int, stream:BinaryIO, big_endian:bool) -> tuple[int, list[TDMSDataTypesListTypes] | array[TDMSDataTypesArrayTypes]]:
-    array_state = self.array_state()
-    if array_state:
-      typecode, itemsize = array_state
-      n_bytes = values * itemsize
-      raw_bytes = stream.read(n_bytes)
-
-      arr:array[TDMSDataTypesArrayTypes] = array(typecode)
-      arr.frombytes(raw_bytes)
-
-      # Endian conversion if needed
-      if big_endian != (SYSTEM_BYTEORDER == 'big'):
-        arr.byteswap()
-
-      return (n_bytes, arr)
-    
-    if self == TDMSDataTypes.tdsTypeExtendedFloat:
-      n_bytes = 10 * values
-      raw_bytes = stream.read(n_bytes)
-      
-      bytearr:list[bytes] = [raw_bytes[i*10:i*10+10] for i in range(len(raw_bytes) // 10)]
-      arr:array[TDMSDataTypesArrayTypes] = array('d', [Number.unpack_efloat(b) for b in bytearr])
-      return (n_bytes, arr)
-    
-    offsets = [Number.unpack_uint(stream.read(4), big_endian) for _ in range(values)]
-    
-    # Read chars
-    n_bytes = total_bytes - (values * 4)
-    char_bytes = stream.read(n_bytes)
-    
-    strings: list[TDMSDataTypesListTypes] = []
-    prev_offset = 0
-    for off in offsets:
-        strings.append(char_bytes[prev_offset:off].decode('utf-8', errors='replace'))
-        prev_offset = off
-    return (n_bytes, strings)
-
 @dataclass
 class TDMSRawDataLayout:
   data_type:  TDMSDataTypes
@@ -678,3 +610,12 @@ class Timestamp:
       offset = index * self.ITEM_SIZE_BYTES
       return Timestamp.from_bytes(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
+
+
+# Imports
+NumericArray = Number.NumericArray
+ComplexArray = Number.ComplexArray
+ExtendedFloatArray = Number.ExtendedFloatArray
+TimestampArray = Timestamp.TimestampArray
+BooleanArray = Boolean.BooleanArray
+StringArray = String.StringArray
