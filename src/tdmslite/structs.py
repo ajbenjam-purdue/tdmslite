@@ -1,3 +1,4 @@
+from __future__ import annotations
 from enum import Enum, IntEnum
 from array import array
 from collections.abc import Sequence
@@ -9,6 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Iterator, Self
 from array import array
+
 import struct
 
 from sys import byteorder as SYSTEM_BYTEORDER
@@ -231,6 +233,71 @@ class TDMSArray(Sequence[Any], ABC):
     return f"{self.__class__.__name__}(data_type={self.data_type.name}, " \
       f"len={len(self)}, data=[{samples}{suffix}])"
 
+  @classmethod
+  def create(cls, data_type: TDMSDataTypes, big_endian: bool = False) -> TDMSArray:
+      if data_type in Number.NumericArray.TYPECODES:
+          return Number.NumericArray(data_type)
+      if data_type == TDMSDataTypes.tdsTypeBoolean:
+          return Boolean.BooleanArray(data_type)
+      if data_type in (TDMSDataTypes.tdsTypeComplexSingleFloat, 
+        TDMSDataTypes.tdsTypeComplexDoubleFloat):
+        return Number.ComplexArray(data_type)
+      if data_type in (TDMSDataTypes.tdsTypeExtendedFloat,
+        TDMSDataTypes.tdsTypeExtendedFloatWithUnit):
+        return Number.ExtendedFloatArray(data_type, big_endian=big_endian)
+      if data_type == TDMSDataTypes.tdsTypeTimeStamp:
+        return Timestamp.TimestampArray(data_type, big_endian=big_endian)
+      if data_type == TDMSDataTypes.tdsTypeString:
+        return String.StringArray(data_type)
+      raise NotImplementedError(f"Raw data loading for {data_type.name} is not supported")
+      
+
+  @classmethod
+  def from_stream(cls, stream: BinaryIO, data_type: TDMSDataTypes, n_values: int,
+    total_bytes: int, big_endian: bool) -> tuple[int, TDMSArray]:
+    arr = cls.create(data_type, big_endian=big_endian)
+
+    if isinstance(arr, Number.NumericArray):
+        n_bytes = n_values * arr._raw.itemsize # type: ignore
+        arr.extend_from_bytes(stream.read(n_bytes), big_endian=big_endian)
+        return (n_bytes, arr)
+
+    if isinstance(arr, Boolean.BooleanArray):
+        n_bytes = n_values
+        arr.extend_from_bytes(stream.read(n_bytes))
+        return (n_bytes, arr)
+
+    if isinstance(arr, Number.ComplexArray):
+        n_bytes = n_values * arr._raw.itemsize * 2 # type: ignore
+        arr.extend_from_bytes(stream.read(n_bytes), big_endian=big_endian)
+        return (n_bytes, arr)
+
+    if isinstance(arr, Number.ExtendedFloatArray):
+        n_bytes = n_values * Number.ExtendedFloatArray.ITEM_SIZE_BYTES
+        arr.extend_from_bytes(stream.read(n_bytes), big_endian=big_endian)
+        return (n_bytes, arr)
+
+    if isinstance(arr, Timestamp.TimestampArray):
+        n_bytes = n_values * Timestamp.TimestampArray.ITEM_SIZE_BYTES
+        arr.extend_from_bytes(stream.read(n_bytes), big_endian=big_endian)
+        return (n_bytes, arr)
+
+    if isinstance(arr, String.StringArray):
+        offsets = [Number.unpack_uint(stream.read(4), big_endian) for _ in
+        range(n_values)]
+        char_bytes_len = total_bytes - (n_values * 4)
+        char_bytes = stream.read(char_bytes_len)
+
+        strings: list[str] = []
+        prev_offset = 0
+        for off in offsets:
+            strings.append(char_bytes[prev_offset:off].decode('utf-8',
+            errors='replace'))
+            prev_offset = off
+        arr._strings = strings # type: ignore
+        return (total_bytes, arr)
+
+    raise NotImplementedError(f"Unsupported data type: {data_type}")
 
 # String container
 class String:
