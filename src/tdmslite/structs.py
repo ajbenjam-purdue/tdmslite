@@ -307,47 +307,6 @@ class Number:
   max_u64_bytes:bytes = b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF'
   max_u64:int = int.from_bytes(max_u64_bytes)
   
-  class ComplexArray(Sequence[complex]):
-    def __init__(self, typecode:str='d') -> None:
-      self.typecode = typecode # f for single, d for double
-      self._raw:array[float] = array(typecode)
-    
-    def frombytes(self, data:bytes, big_endian:bool) -> None:
-      temp_arr:array[float] = array(self.typecode)
-      temp_arr.frombytes(data)
-      if big_endian != (SYSTEM_BYTEORDER == 'big'):
-        temp_arr.byteswap()
-      self._raw.extend(temp_arr)
-    
-    def __len__(self) -> int:
-      return len(self._raw) // 2
-    
-    def __getitem__(self, index:int) -> complex:
-      if index < 0: index += len(self)
-      if index < 0 or index >= len(self):
-        raise IndexError(f"Index {index} is out of bounds for ComplexArray of length {len(self)}")
-
-      return complex(self._raw[2 * index], self._raw[2 * index + 1])
-  
-  class ExtendedFloatArray(Sequence[float]):
-    N_BYTES = 10
-    
-    def __init__(self, big_endian:bool) -> None:
-      self.big_endian = big_endian
-      self._bytes = bytearray()
-      
-    def frombytes(self, data: bytes) -> None:
-      self._bytes.extend(data)
-    
-    def __len__(self) -> int:
-      return len(self._bytes) // self.N_BYTES
-
-    def __getitem__(self, index:int) -> float:
-      if index < 0: index += len(self)
-      if index < 0 or index >= len(self):
-        raise IndexError(f"Index {index} is out of bounds for ExtendedFloatArray of length {len(self)}")
-      
-      return Number.unpack_efloat(self._bytes[index*10:index*10+10], self.big_endian)
   
   @classmethod
   def pack_u32(cls, content:int, big_endian:bool=False) -> bytes:
@@ -492,6 +451,41 @@ class Number:
     
     def __iter__(self) -> Iterator[Any]:
       return iter(self._raw)
+
+  class ComplexArray(TDMSArray):
+    TYPECODES: dict[TDMSDataTypes, str] = {
+      TDMSDataTypes.tdsTypeComplexSingleFloat: 'f',
+      TDMSDataTypes.tdsTypeComplexDoubleFloat: 'd',
+    }
+
+    def __init__(self, data_type: TDMSDataTypes, raw:array[float]|None = None) -> None:
+      self.data_type = data_type
+      self.typecode = self.TYPECODES[data_type]
+      self._raw:array[float] = raw if raw is not None else array(self.typecode)
+
+    def extend_from_bytes(self, data: bytes | bytearray, big_endian: bool) -> None:
+      temp:array[float] = array(self.typecode)
+      temp.frombytes(data)
+      if big_endian != (SYSTEM_BYTEORDER == 'big'):
+        temp.byteswap()
+      self._raw.extend(temp)
+
+    def extend(self, other: TDMSArray) -> None:
+      if not isinstance(other, Number.ComplexArray) or other.typecode != self.typecode:
+        raise TypeError(f"Cannot extend {self} with {other}")
+      self._raw.extend(other._raw)
+
+    def __len__(self) -> int:
+      return len(self._raw) // 2
+
+    def __getitem__(self, index: int | slice) -> complex | list[complex]:
+      if isinstance(index, slice):
+        return [self[i] for i in range(*index.indices(len(self)))] # type: ignore
+      if index < 0:
+        index += len(self)
+      if index < 0 or index >= len(self):
+        raise IndexError(f"Index {index} out of bounds for length {len(self)}")
+      return complex(self._raw[2 * index], self._raw[2 * index + 1])
 
 class Boolean:
   
