@@ -10,15 +10,15 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Iterator, Self
 from array import array
-
+from sys import byteorder as SYSTEM_BYTEORDER
 import struct
 
-from sys import byteorder as SYSTEM_BYTEORDER
 
-type TDMSDataTypesArrayTypes = float | int
-type TDMSDataTypesListTypes  = str | datetime | bool
+# Type definitions
 type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
 
+
+# Enum classes
 class TOCFlag(Enum):
   kTocMetaData        = 0x00000002
   kTocNewObjList      = 0x00000004
@@ -120,6 +120,8 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
+
+# Data container classes
 @dataclass
 class TDMSRawDataLayout:
   data_type:  TDMSDataTypes
@@ -135,10 +137,10 @@ class TDMSMetadataObject:
     field(default_factory=dict[str, TDMSMetadataObjectValue])
 
 
-
-# Generic api
+# Data storage interface classes
 class TDMSArray(Sequence[Any], ABC):
-  
+  """Generic data storage ABC. To create storage objects use StringArray, NumericArray, ComplexArray, ExtendedFloatArray, TimestampArray, or BooleanArray
+  """
   data_type: TDMSDataTypes
   
   @abstractmethod
@@ -232,7 +234,7 @@ class TDMSArray(Sequence[Any], ABC):
     raise NotImplementedError(f"Unsupported data type: {data_type}")
 
 
-# String container
+# Helper classes
 class String:
   
   @classmethod
@@ -279,6 +281,9 @@ class String:
     return (parts[0] if len(parts) > 0 else None, parts[1] if len(parts) > 1 else None)      
 
   class StringArray(TDMSArray):
+    """String array container providing interface to Python strings
+    """
+    
     def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeString, strings:
     list[str] | None = None) -> None:
       self.data_type = data_type
@@ -298,8 +303,6 @@ class String:
     def __iter__(self) -> Iterator[str]:
       return iter(self._strings)
 
-
-# Numeric container
 class Number:
   
   max_u32_bytes:bytes = b'\xFF\xFF\xFF\xFF'
@@ -411,6 +414,9 @@ class Number:
     return real + imag * 1j
 
   class NumericArray(TDMSArray):
+    """Numeric array container providing interface to Python floats
+    """
+    
     TYPECODES: dict[TDMSDataTypes, str] = {
       TDMSDataTypes.tdsTypeI8: 'b',
       TDMSDataTypes.tdsTypeU8: 'B',
@@ -453,6 +459,9 @@ class Number:
       return iter(self._raw)
 
   class ComplexArray(TDMSArray):
+    """Complex numeric array container providing interface to Python complex floats
+    """
+    
     TYPECODES: dict[TDMSDataTypes, str] = {
       TDMSDataTypes.tdsTypeComplexSingleFloat: 'f',
       TDMSDataTypes.tdsTypeComplexDoubleFloat: 'd',
@@ -488,6 +497,8 @@ class Number:
       return complex(self._raw[2 * index], self._raw[2 * index + 1])
 
   class ExtendedFloatArray(TDMSArray):
+    """Quad/80b array container providing interface to Python floats
+    """
     ITEM_SIZE_BYTES = 10
 
     def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeExtendedFloat,
@@ -519,8 +530,6 @@ class Number:
       return Number.unpack_efloat(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
-
-# Bool container
 class Boolean:
   
   @classmethod
@@ -528,6 +537,9 @@ class Boolean:
     return stream.read(1) == b'\x01'
   
   class BooleanArray(TDMSArray):
+    """Boolean array container providing interface to Python boolean objects
+    """
+    
     def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeBoolean, raw:
     bytearray | None = None) -> None:
         self.data_type = data_type
@@ -564,10 +576,8 @@ class Boolean:
       for b in self._raw:
         yield bool(b)
 
-
-# Timestamp container
 class Timestamp:
-
+  
   EPOCH = datetime(1904, 1, 1, tzinfo=timezone.utc)
   TWO_POW_64 = 1 << 64
 
@@ -592,6 +602,8 @@ class Timestamp:
     return content_0_8 + content_8_16
 
   class TimestampArray(TDMSArray):
+    """Timestamp array container providing interface to Python datetime.datetime objects
+    """
     ITEM_SIZE_BYTES = 16
 
     def __init__(self, data_type: TDMSDataTypes = TDMSDataTypes.tdsTypeTimeStamp, raw:
@@ -624,7 +636,7 @@ class Timestamp:
         big_endian=self.big_endian)
 
 
-# Imports
+# Import aliases
 NumericArray = Number.NumericArray
 ComplexArray = Number.ComplexArray
 ExtendedFloatArray = Number.ExtendedFloatArray

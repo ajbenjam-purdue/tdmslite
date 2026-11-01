@@ -9,6 +9,9 @@ from logging import getLogger
 logger = getLogger(__name__)
 
 class TDMSLeadIn:
+  """Lead-in container class. References NI's documentation: "TDMS File Format Internal Structure"
+  """
+  
   def __init__(self, stream:BinaryIO) -> None:
       
     # Set defaults
@@ -55,14 +58,18 @@ class TDMSLeadIn:
       self.integrity |= TDMSLeadInIntegrity.WARN
     
 class TDMSMetadata:
+  """Metadata creation and container class. References NI's documentation: "TDMS File Format Internal Structure"
+  """
 
   def __init__(self, stream:BinaryIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> None:
     
     n_objects = Number.unpack_uint(stream.read(4), big_endian=big_endian)
-    
     self.objects:list[TDMSMetadataObject] = []
+    
+    # Unpack objects in metadata
     for _ in range(n_objects):
-        
+      
+      # Extract object path and data state existence
       object_path = String.unpack(stream, big_endian=big_endian)
       raw_data_index = Number.unpack_uint(stream.read(4), big_endian=big_endian)
       
@@ -72,33 +79,44 @@ class TDMSMetadata:
       elif raw_data_index == 0x00000000: # Reuse
         raw_layout = channel_states.get(object_path)
       else:
+        # Extract data type, dimension (always 1 I believe), and number of values
         raw_data_type = TDMSDataTypes(
           Number.unpack_uint(stream.read(4), big_endian=big_endian))
         dim = Number.unpack_uint(stream.read(4), big_endian=big_endian)
         n_values = Number.unpack_uint(stream.read(8), big_endian=big_endian)
         
+        # Check the string size (total size) or 0 if unused
         total_size:int = Number.unpack_uint(stream.read(8), big_endian=big_endian) \
           if raw_data_type == TDMSDataTypes.tdsTypeString else 0
         
+        # Get raw data layout
         raw_layout = TDMSRawDataLayout(raw_data_type, dim, n_values, total_size)
       
+      # Save the raw layout (unused, not attached, or raw data layout)
       if raw_layout: channel_states[object_path] = raw_layout
+      
+      # Unpack the properties per-object
       n_properties = Number.unpack_uint(stream.read(4), big_endian=big_endian)
       properties:dict[str, TDMSMetadataObjectValue] = {}
       
       for _ in range(n_properties):
         
+        # Extract the property's data
         property_name = String.unpack(stream, big_endian=big_endian)
         property_type = TDMSDataTypes(Number.unpack_uint(stream.read(4), big_endian=big_endian))
-        
         property_value = property_type.unpack(stream, big_endian=big_endian)
+        
+        # Save the property
         logger.info(f"Read Property(name=\"{property_name}\", type={property_type.name}, val={property_value})")
         properties[property_name] = property_value
       
+      # Create the object and add it to objects list
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
 
 class TDMSChannel:
-
+  """Physical Channel container class
+  """
+  
   def __init__(self, name:str, path:str, data_type:TDMSDataTypes|None=None) -> None:
     self.name = name
     self.path = path
@@ -107,6 +125,8 @@ class TDMSChannel:
     self.data:TDMSArray|None = None
   
   def add_data(self, chunk:TDMSArray) -> None:
+    
+    # If no data exists, set the data
     if self.data:
       self.data.extend(chunk)
     else: self.data = chunk
@@ -128,6 +148,9 @@ class TDMSChannel:
       f" data_type={self.data_type}, data={"None" if len(self) == 0 else len(self)})")
 
 class TDMSGroup:
+  """Physical Group container class
+  """
+  
   def __init__(self, name: str) -> None:
     self.name: str = name
     self.properties: dict[str,TDMSMetadataObjectValue] = {}
@@ -146,6 +169,8 @@ class TDMSGroup:
       f"channels={list(self.channels.keys())})"
 
 class TDMSSegment:
+  """Virtual Segment container class
+  """
   
   def __init__(self, stream: BinaryIO, 
                channel_states: dict[str, TDMSRawDataLayout], 
@@ -170,28 +195,42 @@ class TDMSSegment:
     self.raw_chunks: dict[str, TDMSArray] = {}
     if self.lead_in.has_rawdata:
       
+      # Seek to raw data and read
       self.stream.seek(self.start_pos + 28 + self.lead_in.raw_data_offset)
       total_bytes_read:int = self._read_raw_data()
       logger.info(f"Read {total_bytes_read} bytes of raw data")
 
   def _read_raw_data(self) -> int:
     total_read_bytes:int = 0
+    
+    # For each object, create the corresponding array
     for obj in self.objects:
+      
+      # Object lacks data, ignore
       if not obj.raw_layout or obj.raw_layout.n_vals == 0:
         continue
 
-      layout = obj.raw_layout
+      # Create array object
       bytes_read, chunk = TDMSArray.from_stream(
-        self.stream, layout.data_type, layout.n_vals, 
-        layout.total_bytes, self.lead_in.big_endian)
+        self.stream, obj.raw_layout.data_type, obj.raw_layout.n_vals, 
+        obj.raw_layout.total_bytes, self.lead_in.big_endian)
       
+      # Save array object
       self.raw_chunks[obj.path] = chunk
       total_read_bytes += bytes_read
       
     return total_read_bytes
 
 class TDMSDocument:
+  """Physical Document container class
+  """
+  
   def __init__(self, stream: BinaryIO) -> None:
+    """Create an in-place TDMSDocument from a BinaryIO stream
+
+    Args:
+        stream (BinaryIO): The readable buffer to create the TDMSDocument from
+    """
     self.properties: dict[str, TDMSMetadataObjectValue] = {}
     self.groups: dict[str, TDMSGroup] = {}
 
@@ -199,6 +238,7 @@ class TDMSDocument:
     channel_states: dict[str, TDMSRawDataLayout] = {}
     active_objects: list[TDMSMetadataObject] = []
 
+    # Read each segment until EOF
     while True:
       seg_start = stream.tell()
 
@@ -240,6 +280,19 @@ class TDMSDocument:
   
   @classmethod
   def from_file(cls, path:str|Path) -> TDMSDocument:
+    """Load a TDMS document into memory from the provided path.
+
+    Args:
+      path (str | Path): The path to the .tdms file
+
+    Returns:
+      TDMSDocument: The TDMSDocument object read from the provided file
+
+    Raises:
+      ValueError: Raised if the filetype is not valid
+      FileNotFoundError: Raised if the file does not exist
+      RuntimeError: Raised if the TDMSDocument object encounters an error while loading
+    """
     
     path = Path(path).resolve()
     if path.suffix.lower() != '.tdms':
@@ -247,8 +300,11 @@ class TDMSDocument:
     if not path.exists():
       raise FileNotFoundError(f"File at path {path} does not exist")
     
-    with open(Path(path).resolve(), 'rb') as f:
-      file = TDMSDocument(f)
+    try:
+      with open(Path(path).resolve(), 'rb') as f:
+        file = TDMSDocument(f)
+    except Exception as e:
+      raise RuntimeError(f"Encountered exception while loading TMDS file: {e}")
     return file
 
   def __getitem__(self, key:str) -> TDMSGroup | None:
