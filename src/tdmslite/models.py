@@ -189,4 +189,49 @@ class TDMSSegment:
         pass
 
 class TDMSDocument:
-  pass
+  def __init__(self, stream: BinaryIO) -> None:
+    self.properties: dict[str, TDMSMetadataObjectValue] = {}
+    self.groups: dict[str, TDMSGroup] = {}
+
+    # Persistant state
+    channel_states: dict[str, TDMSRawDataLayout] = {}
+    active_objects: list[TDMSMetadataObject] = []
+
+    while True:
+      seg_start = stream.tell()
+
+      # Delegate parsing
+      segment = TDMSSegment(stream, channel_states, active_objects)
+      if segment.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
+        segment.lead_in.integrity == TDMSLeadInIntegrity.DONE:
+        break
+
+      active_objects = segment.objects
+
+      # Update Document hierarchy
+      for obj in segment.objects:
+        group_name, chan_name = String.parse_path(obj.path)
+
+        if group_name is None and chan_name is None:
+          self.properties.update(obj.properties)
+        elif group_name and not chan_name:
+          group = self.groups.setdefault(group_name, TDMSGroup(group_name))
+          group.properties.update(obj.properties)
+        elif group_name and chan_name:
+          group = self.groups.setdefault(group_name, TDMSGroup(group_name))
+          dtype = obj.raw_layout.data_type if obj.raw_layout else None
+          if chan_name not in group.channels:
+            group.channels[chan_name] = TDMSChannel(chan_name, obj.path, dtype)
+
+          group.channels[chan_name].properties.update(obj.properties)
+
+      # Add segment's chunks
+      for path, chunk in segment.raw_chunks.items():
+        group_name, chan_name = String.parse_path(path)
+        if group_name and chan_name:
+          self.groups[group_name].channels[chan_name].add_data(chunk)
+
+      # EOF?
+      if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
+        break
+      stream.seek(seg_start + 28 + segment.lead_in.next_segment)
