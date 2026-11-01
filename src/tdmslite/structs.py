@@ -166,22 +166,22 @@ class TDMSArray(Sequence[Any], ABC):
       f"len={len(self)}, data=[{samples}{suffix}])"
 
   @classmethod
-  def create(cls, data_type: TDMSDataTypes, big_endian: bool = False) -> TDMSArray:
-      if data_type in Number.NumericArray.TYPECODES:
-          return Number.NumericArray(data_type)
-      if data_type == TDMSDataTypes.tdsTypeBoolean:
-          return Boolean.BooleanArray(data_type)
-      if data_type in (TDMSDataTypes.tdsTypeComplexSingleFloat, 
-        TDMSDataTypes.tdsTypeComplexDoubleFloat):
-        return Number.ComplexArray(data_type)
-      if data_type in (TDMSDataTypes.tdsTypeExtendedFloat,
-        TDMSDataTypes.tdsTypeExtendedFloatWithUnit):
-        return Number.ExtendedFloatArray(data_type, big_endian=big_endian)
-      if data_type == TDMSDataTypes.tdsTypeTimeStamp:
-        return Timestamp.TimestampArray(data_type, big_endian=big_endian)
-      if data_type == TDMSDataTypes.tdsTypeString:
-        return String.StringArray(data_type)
-      raise NotImplementedError(f"Raw data loading for {data_type.name} is not supported")
+  def create(cls, data_type:TDMSDataTypes, big_endian:bool=False) -> TDMSArray:
+    if data_type in Number.NumericArray.TYPECODES:
+      return Number.NumericArray(data_type)
+    if data_type == TDMSDataTypes.tdsTypeBoolean:
+      return Boolean.BooleanArray(data_type)
+    if data_type in (TDMSDataTypes.tdsTypeComplexSingleFloat, 
+      TDMSDataTypes.tdsTypeComplexDoubleFloat):
+      return Number.ComplexArray(data_type)
+    if data_type in (TDMSDataTypes.tdsTypeExtendedFloat,
+      TDMSDataTypes.tdsTypeExtendedFloatWithUnit):
+      return Number.ExtendedFloatArray(data_type, big_endian=big_endian)
+    if data_type == TDMSDataTypes.tdsTypeTimeStamp:
+      return Timestamp.TimestampArray(data_type, big_endian=big_endian)
+    if data_type == TDMSDataTypes.tdsTypeString:
+      return String.StringArray(data_type)
+    raise NotImplementedError(f"Raw data loading for {data_type.name} is not supported")
       
 
   @classmethod
@@ -230,6 +230,7 @@ class TDMSArray(Sequence[Any], ABC):
         return (total_bytes, arr)
 
     raise NotImplementedError(f"Unsupported data type: {data_type}")
+
 
 # String container
 class String:
@@ -532,13 +533,24 @@ class Boolean:
         self.data_type = data_type
         self._raw: bytearray = raw if raw is not None else bytearray()
 
-    def extend_from_bytes(self, data: bytes | bytearray) -> None:
-        self._raw.extend(data)
+    @classmethod
+    def from_array(cls, other:NumericArray|StringArray) -> BooleanArray:
+      temp_arr = BooleanArray()
+      temp_arr.extend(other)
+      return temp_arr
+
+    def extend_from_bytes(self, data:bytes|bytearray) -> None:
+      self._raw.extend(data)
 
     def extend(self, other: TDMSArray) -> None:
-      if not isinstance(other, Boolean.BooleanArray):
+      if isinstance(other, BooleanArray):
+        self._raw.extend(other._raw)
+      elif isinstance(other, NumericArray):
+        self._raw.extend([0b1 if a > 0 else 0b0 for a in other._raw]) # type: ignore
+      elif isinstance(other, StringArray):
+        self._raw.extend([0b1 if a != "" else 0b0 for a in other._strings]) # type: ignore
+      else:
         raise TypeError(f"Cannot extend {self} with {other}")
-      self._raw.extend(other._raw)
 
     def __len__(self) -> int:
       return len(self._raw)
