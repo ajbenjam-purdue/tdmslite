@@ -271,6 +271,11 @@ class TDMSDocument:
       file = TDMSDocument(f)
     return file
 
+  def __getitem__(self, key:str) -> TDMSGroup | None:
+    if key in self.groups:
+      return self.groups[key]
+    return None
+
   def __repr__(self) -> str:
     return f"TDMSDocument(Properties={self.properties}, " \
       f"Groups=[{", ".join([repr(group) for group in self.groups.values()])}])"
