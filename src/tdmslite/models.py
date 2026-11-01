@@ -1,7 +1,7 @@
 from typing import BinaryIO
 from array import array
 from pathlib import Path
-from structs import TOCFlag, TOCVersion, Number, \
+from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   TDMSMetadataObjectValue, TDMSDataTypesArrayTypes, \
@@ -135,6 +135,11 @@ class TDMSGroup:
   def __getitem__(self, channel_name: str) -> TDMSChannel:
     return self.channels[channel_name]
 
+  def __repr__(self) -> str:
+    return f"Group(name={self.name}, " \
+      f"properties={list(self.properties.keys())}, " \
+      f"channels={list(self.channels.keys())})"
+
 class TDMSSegment:
   
   def __init__(self, stream: BinaryIO, 
@@ -265,3 +270,7 @@ class TDMSDocument:
     with open(Path(path).resolve(), 'rb') as f:
       file = TDMSDocument(f)
     return file
+
+  def __repr__(self) -> str:
+    return f"TDMSDocument(Properties={self.properties}, " \
+      f"Groups=[{", ".join([repr(group) for group in self.groups.values()])}])"
