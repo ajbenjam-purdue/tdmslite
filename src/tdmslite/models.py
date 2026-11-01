@@ -1,11 +1,9 @@
-from typing import BinaryIO
-from array import array
+from typing import BinaryIO, Any, Generator
 from pathlib import Path
 from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
-  TDMSMetadataObjectValue, TDMSDataTypesArrayTypes, \
-  TDMSDataTypesListTypes
+  TDMSMetadataObjectValue, TDMSArray
 from logging import getLogger
 
 
@@ -107,24 +105,24 @@ class TDMSChannel:
     self.path = path
     self.data_type = data_type
     self.properties:dict[str,TDMSMetadataObjectValue] = {}
-    self.data:array[TDMSDataTypesArrayTypes]|list[TDMSDataTypesListTypes] = []
+    self.data:TDMSArray|None = None
   
-  def add_data(self, data:list[TDMSDataTypesListTypes]|array[TDMSDataTypesArrayTypes]) -> None:
-    if len(self.data) == 0:
-      self.data = data.copy() if isinstance(data, list) else data
-    else:
-      if isinstance(self.data, list) and isinstance(data, list):
-        self.data.extend(data)
-      elif isinstance(self.data, array) and isinstance(data, array):
-        if self.data.typecode == data.typecode:
-          self.data.extend(data)
+  def add_data(self, chunk:TDMSArray) -> None:
+    if self.data:
+      self.data.extend(chunk)
+    else: self.data = chunk
   
   def __len__(self) -> int:
-    return len(self.data)
+    return len(self.data) if self.data else 0
+  
+  def __getitem__(self, key:int|slice) -> Any:
+    if self.data:
+      return self.data[key]
+    raise IndexError(f"Channel {self.name} ({self.path}) has no data")
   
   def __repr__(self) -> str:
-    return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")}, data_type={self.data_type}, "
-            f"data={"None" if len(self) == 0 else len(self)})")
+    return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")},"\
+      f" data_type={self.data_type}, data={"None" if len(self) == 0 else len(self)})")
 
 class TDMSGroup:
   def __init__(self, name: str) -> None:
@@ -162,7 +160,7 @@ class TDMSSegment:
       self.objects = active_objects # keep previous active objects
 
     # Rawdata
-    self.raw_chunks: dict[str, array[TDMSDataTypesArrayTypes] | list[TDMSDataTypesListTypes]] = {}
+    self.raw_chunks: dict[str, TDMSArray] = {}
     if self.lead_in.has_rawdata:
       
       self.stream.seek(self.start_pos + 28 + self.lead_in.raw_data_offset)
@@ -176,12 +174,11 @@ class TDMSSegment:
         continue
 
       layout = obj.raw_layout
-      dtype = layout.data_type
-      bytes_read, result = dtype.to_struct(
-        layout.n_vals, layout.total_bytes, self.stream, 
-        big_endian=self.lead_in.big_endian)
+      bytes_read, chunk = TDMSArray.from_stream(
+        self.stream, layout.data_type, layout.n_vals, 
+        layout.total_bytes, self.lead_in.big_endian)
       
-      self.raw_chunks[obj.path] = result
+      self.raw_chunks[obj.path] = chunk
       total_read_bytes += bytes_read
       
     return total_read_bytes
