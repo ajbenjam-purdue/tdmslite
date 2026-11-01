@@ -1,5 +1,6 @@
 from enum import Enum, IntEnum
 from array import array
+from collections.abc import Sequence
 from typing import Iterable, Self, BinaryIO
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
@@ -247,6 +248,48 @@ class Number:
   max_u64_bytes:bytes = b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF'
   max_u64:int = int.from_bytes(max_u64_bytes)
   
+  class ComplexArray(Sequence[complex]):
+    def __init__(self, typecode:str='d') -> None:
+      self.typecode = typecode # f for single, d for double
+      self._raw:array[float] = array(typecode)
+    
+    def frombytes(self, data:bytes, big_endian:bool) -> None:
+      temp_arr:array[float] = array(self.typecode)
+      temp_arr.frombytes(data)
+      if big_endian != (SYSTEM_BYTEORDER == 'big'):
+        temp_arr.byteswap()
+      self._raw.extend(temp_arr)
+    
+    def __len__(self) -> int:
+      return len(self._raw) // 2
+    
+    def __getitem__(self, index:int) -> complex:
+      if index < 0: index += len(self)
+      if index < 0 or index >= len(self):
+        raise IndexError(f"Index {index} is out of bounds for ComplexArray of length {len(self)}")
+
+      return complex(self._raw[2 * index], self._raw[2 * index + 1])
+  
+  class ExtendedFloatArray(Sequence[float]):
+    N_BYTES = 10
+    
+    def __init__(self, big_endian:bool) -> None:
+      self.big_endian = big_endian
+      self._bytes = bytearray()
+      
+    def frombytes(self, data: bytes) -> None:
+      self._bytes.extend(data)
+    
+    def __len__(self) -> int:
+      return len(self._bytes) // self.N_BYTES
+
+    def __getitem__(self, index:int) -> float:
+      if index < 0: index += len(self)
+      if index < 0 or index >= len(self):
+        raise IndexError(f"Index {index} is out of bounds for ExtendedFloatArray of length {len(self)}")
+      
+      return Number.unpack_efloat(self._bytes[index*10:index*10+10], self.big_endian)
+  
   @classmethod
   def pack_u32(cls, content:int, big_endian:bool=False) -> bytes:
     return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=4)
@@ -264,27 +307,27 @@ class Number:
     return content.to_bytes(byteorder='big' if big_endian else 'little', signed=True, length=8)
   
   @classmethod
-  def unpack_uint(cls, content:bytes, big_endian:bool=False) -> int:
+  def unpack_uint(cls, content:bytes|bytearray, big_endian:bool=False) -> int:
     return int.from_bytes(content, 'big' if big_endian else 'little', signed=False)
   
   @classmethod
-  def unpack_int(cls, content:bytes, big_endian:bool=False) -> int:
+  def unpack_int(cls, content:bytes|bytearray, big_endian:bool=False) -> int:
     return int.from_bytes(content, 'big' if big_endian else 'little', signed=True)
   
   @classmethod
-  def unpack_hfloat(cls, content:bytes, big_endian:bool=False) -> float:
+  def unpack_hfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
     return struct.unpack(('>' if big_endian else '<')+'e', content)[0]
   
   @classmethod
-  def unpack_sfloat(cls, content:bytes, big_endian:bool=False) -> float:
+  def unpack_sfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
     return struct.unpack(('>' if big_endian else '<')+'f', content)[0]
   
   @classmethod
-  def unpack_dfloat(cls, content:bytes, big_endian:bool=False) -> float:
+  def unpack_dfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
     return struct.unpack(('>' if big_endian else '<')+'d', content)[0]
   
   @classmethod
-  def unpack_efloat(cls, content:bytes, big_endian:bool=False) -> float:
+  def unpack_efloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
     
     # https://en.wikipedia.org/wiki/Extended_precision
     
@@ -326,7 +369,7 @@ class Number:
       return inf if sign > 0 else -inf
 
   @classmethod
-  def unpack_fixed(cls, content:bytes, word_length:int, int_word_length:int, signed:bool, big_endian:bool=False) -> float:
+  def unpack_fixed(cls, content:bytes|bytearray, word_length:int, int_word_length:int, signed:bool, big_endian:bool=False) -> float:
     integer = cls.unpack_int(content=content, big_endian=big_endian)
     
     fraction = word_length - int_word_length
@@ -336,14 +379,14 @@ class Number:
     return integer / (2 ** fraction)
 
   @classmethod
-  def unpack_csfloat(cls, content:bytes, big_endian:bool=False) -> complex:
+  def unpack_csfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> complex:
     real = cls.unpack_sfloat(content[0:4], big_endian=big_endian)
     imag = cls.unpack_sfloat(content[4:8], big_endian=big_endian)
     
     return real + imag * 1j
   
   @classmethod
-  def unpack_cdfloat(cls, content:bytes, big_endian:bool=False) -> complex:
+  def unpack_cdfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> complex:
     real = cls.unpack_dfloat(content[0:8], big_endian=big_endian)
     imag = cls.unpack_dfloat(content[8:16], big_endian=big_endian)
     
@@ -361,7 +404,7 @@ class Timestamp:
   TWO_POW_64 = 1 << 64
 
   @classmethod
-  def from_bytes(cls, content: bytes, big_endian: bool) -> datetime:
+  def from_bytes(cls, content: bytes|bytearray, big_endian: bool) -> datetime:
     fraction = Number.unpack_uint(content[0:8], big_endian=big_endian)
     seconds = Number.unpack_int(content[8:16], big_endian=big_endian)
     microseconds = round(fraction * 1_000_000 / cls.TWO_POW_64)
