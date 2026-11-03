@@ -279,7 +279,7 @@ class TDMSDocument:
       stream.seek(seg_start + 28 + segment.lead_in.next_segment)
   
   @classmethod
-  def from_file(cls, path:str|Path) -> TDMSDocument:
+  def from_file(cls, path:str|Path) -> 'TDMSDocument':
     """Load a TDMS document into memory from the provided path.
 
     Args:
