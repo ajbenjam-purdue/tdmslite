@@ -222,7 +222,9 @@ class TDMSSegment:
     return total_read_bytes
 
 class TDMSDocument:
-  """Physical Document container class
+  """Physical Document container class to manage the ingestion of data from a .tdms file.
+  If a file is on disk, use the constructor `TDMSDocument.from_file()` to load it. 
+  If a file is trustworthy and present in a buffered binary IO reader, use the constructor `TDMSDocument()` directly. 
   """
   
   def __init__(self, stream: BinaryIO) -> None:
@@ -308,14 +310,32 @@ class TDMSDocument:
     return file
 
   def __getitem__(self, key:str) -> TDMSGroup | None:
+    """Return the group whose name is the provided key or None if a match is not found
+
+    Args:
+      key (str): The key to search the TDMSDocument for
+
+    Returns:
+      TDMSGroup | None: The resulting TDMSGroup or None if no matching group is found
+    """
     if key in self.groups:
       return self.groups[key]
     return None
 
   def __iter__(self) -> Generator[TDMSGroup]:
+    """Create a generator object to yield one TDMSGroup at a time from the TDMSDocument's available groups
+
+    Yields:
+      Generator[TDMSGroup]: The generator that iterates through all groups present in a TDMSDocument
+    """
     for group in self.groups.values():
       yield group
 
   def __repr__(self) -> str:
+    """Return the inline representation of the TDMSDocument
+
+    Returns:
+        str: The inline representation of the TDMSDocument
+    """
     return f"TDMSDocument(Properties={self.properties}, " \
       f"Groups=[{", ".join([repr(group) for group in self.groups.values()])}])"

@@ -20,6 +20,10 @@ type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
 
 # Enum classes
 class TOCFlag(Enum):
+  """An enum to contain table of contents values by integer (U32) lookup. 
+  Calling TOCFlag.members(int) returns a list of matching flags by bitwise masking.
+  Calling TOCFlag.pack(Iterable[TOCFlag]) returns a U32 integer matching the bits specified.
+  """
   kTocMetaData        = 0x00000002
   kTocNewObjList      = 0x00000004
   kTocRawData         = 0x00000008
@@ -29,17 +33,41 @@ class TOCFlag(Enum):
 
   @classmethod
   def members(cls, value:int|bytes) -> list[TOCFlag]:
+    """Return the members of a specified U32 integer
+
+    Args:
+        value (int | bytes): The 32-bit integer to check
+
+    Raises:
+        ValueError: Raised if bytes are passed but the count of bytes is not 4
+
+    Returns:
+        list[TOCFlag]: The matching flags
+    """
     if isinstance(value, bytes) and len(value) != 4:
       raise ValueError("Incorrect bytes object length")
     return [flag for flag in TOCFlag if (int.from_bytes(value, 'little') if isinstance(value, bytes) else value) & flag.value]
   
   @classmethod
   def pack(cls, flags:Iterable[TOCFlag]) -> int:
-    return sum([flag.value for flag in flags])
+    """Method to pack an iterable of flags into a single U32 integer.
+    Flags are de-duplicated to prevent stacking errors
+
+    Args:
+        flags (Iterable[TOCFlag]): The flags to pass
+
+    Returns:
+        int: The matching U32 integer
+    """
+    _flags:set[TOCFlag] = set(flags)
+    return sum([flag.value for flag in _flags])
 
 class TOCVersion(IntEnum):
-  TDMS_2 = 4713
-  TDMS_1 = 4712
+  """Version enum to provide nice interface to NI's very abstract 4712/4713 choices
+  """
+  
+  TDMS_2  = 4713
+  TDMS_1  = 4712
   UNKNOWN = 0
   
   @classmethod
@@ -47,6 +75,9 @@ class TOCVersion(IntEnum):
     return TOCVersion.UNKNOWN
 
 class TDMSLeadInIntegrity(Enum):
+  """Integrity enum to provide interface to lead-in integrity states based on the contents and length
+  """
+  
   DONE  = 0 # EOF
   OK    = 1 # good
   WARN  = 2 # suspicious
@@ -56,32 +87,46 @@ class TDMSLeadInIntegrity(Enum):
     return self if self.value > value.value else value
 
 class TDMSDataTypes(IntEnum):
+  """Data type enum to provide nice interface to NI's type system
+  """
   
   # Named to match NI's asinine naming schema
-  tdsTypeVoid = 0x00
-  tdsTypeI8 = 0x01
-  tdsTypeI16 = 0x02
-  tdsTypeI32 = 0x03
-  tdsTypeI64 = 0x04
-  tdsTypeU8 = 0x05
-  tdsTypeU16 = 0x06
-  tdsTypeU32 = 0x07
-  tdsTypeU64 = 0x08
-  tdsTypeSingleFloat = 0x09
-  tdsTypeDoubleFloat = 0x0A
-  tdsTypeExtendedFloat = 0x0B
-  tdsTypeSingleFloatWithUnit = 0x19
-  tdsTypeDoubleFloatWithUnit = 0x1A
+  tdsTypeVoid                  = 0x00
+  tdsTypeI8                    = 0x01
+  tdsTypeI16                   = 0x02
+  tdsTypeI32                   = 0x03
+  tdsTypeI64                   = 0x04
+  tdsTypeU8                    = 0x05
+  tdsTypeU16                   = 0x06
+  tdsTypeU32                   = 0x07
+  tdsTypeU64                   = 0x08
+  tdsTypeSingleFloat           = 0x09
+  tdsTypeDoubleFloat           = 0x0A
+  tdsTypeExtendedFloat         = 0x0B
+  tdsTypeSingleFloatWithUnit   = 0x19
+  tdsTypeDoubleFloatWithUnit   = 0x1A
   tdsTypeExtendedFloatWithUnit = 0x1B
-  tdsTypeString = 0x20
-  tdsTypeBoolean = 0x21
-  tdsTypeTimeStamp = 0x44
-  tdsTypeFixedPoint = 0x4F
-  tdsTypeComplexSingleFloat = 0x08000C
-  tdsTypeComplexDoubleFloat = 0x10000D
-  tdsTypeDAQmxRawData = 0xFFFFFFFF
+  tdsTypeString                = 0x20
+  tdsTypeBoolean               = 0x21
+  tdsTypeTimeStamp             = 0x44
+  tdsTypeFixedPoint            = 0x4F
+  tdsTypeComplexSingleFloat    = 0x08000C
+  tdsTypeComplexDoubleFloat    = 0x10000D
+  tdsTypeDAQmxRawData          = 0xFFFFFFFF
   
   def unpack(self, stream:BinaryIO, big_endian:bool) -> TDMSMetadataObjectValue:
+    """Unpack a corresponding value from the provided stream
+
+    Args:
+        stream (BinaryIO): The stream to read and advance
+        big_endian (bool): The endianness of any numbers
+
+    Raises:
+        NotImplementedError: Raised if an unsupported unit (DAQmxRawData) is attempted to be unpacked
+
+    Returns:
+        TDMSMetadataObjectValue: A corresponding plain python value of the binary representation
+    """
     match self:
       case TDMSDataTypes.tdsTypeString:
         return(String.unpack(stream, big_endian=big_endian))
