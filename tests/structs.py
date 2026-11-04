@@ -1,8 +1,20 @@
 import math
-from tdmslite.structs import Number, String
+from tdmslite.structs import Number, String, Timestamp
+from datetime import datetime, UTC
 
 COMMON_FLOATS:list[float] = [0.0, -0.0, 1.0, -1.0, math.pi, float('inf'), float('-inf')]
 COMMON_INTS:list[int] = [0, -0, 1, 15, 127]
+
+def _test_timestamp() -> tuple[bool, str]:
+  try:
+    for be in (True, False):
+      for dt in [datetime.now(tz=UTC), datetime(2000, 1, 1, tzinfo=UTC), datetime(2050, 1, 2, 3, 4, tzinfo=UTC)]:
+        packed = Timestamp.pack(dt, big_endian=be)
+        unpacked = Timestamp.unpack(packed, big_endian=be)
+        assert dt == unpacked, f"Mismatch on \"{dt}\" (BE={be})"
+  except Exception as e:
+    return False, str(e)
+  return True, ""
 
 def _test_str() -> tuple[bool, str]:
   try:
@@ -181,7 +193,7 @@ def _test_efloat() -> tuple[bool, str]:
 TESTS = [_test_single, _test_double, _test_efloat, 
          _test_u8, _test_i8, _test_u16, _test_i16, 
          _test_u32, _test_i32, _test_u64, _test_i64,
-         _test_str]
+         _test_str, _test_timestamp]
 
 if __name__ == "__main__":
   passed:bool = True
