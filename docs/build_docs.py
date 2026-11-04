@@ -1,15 +1,9 @@
-import inspect, pydoc, sys, pathlib
-
-try:
-  import tdmslite as target_module
-except ImportError:
-  print("tdmslite not on current path")
-  sys.exit(1)
+import inspect, sys, pathlib
 
 def _indent(x:str) -> str:
   return "\n".join([f"> {a}" if not a.startswith(">") else a for a in x.split('\n')])
 
-def generate_markdown(module, output_path:pathlib.Path|str="api"):
+def generate_markdown(module, output_path:pathlib.Path|str="docs/api"):
   output_path = pathlib.Path(output_path).resolve().with_suffix('.md')
   with open(output_path, "w", encoding="utf-8") as f:
     # Title
@@ -57,4 +51,8 @@ def generate_markdown(module, output_path:pathlib.Path|str="api"):
   print(f"Generated {output_path}")
 
 if __name__ == "__main__":
-    generate_markdown(target_module)
+  try:
+    import tdmslite
+    generate_markdown(tdmslite, "docs/reference")
+  except ImportError:
+    print("tdmslite not on current path")
