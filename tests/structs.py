@@ -1,8 +1,19 @@
 import math
-from tdmslite.structs import Number
+from tdmslite.structs import Number, String
 
 COMMON_FLOATS:list[float] = [0.0, -0.0, 1.0, -1.0, math.pi, float('inf'), float('-inf')]
 COMMON_INTS:list[int] = [0, -0, 1, 15, 127]
+
+def _test_str() -> tuple[bool, str]:
+  try:
+    for be in (True, False):
+      for string in ["", " ", "a", "string\nwith\tspecial\\chars", "longstring"*1_000]:
+        packed = String.pack(string, big_endian=be)
+        unpacked = String.unpack(packed, big_endian=be)
+        assert string == unpacked, f"Mismatch on \"{string}\" (BE={be})"
+  except Exception as e:
+    return False, str(e)
+  return True, ""
 
 def _test_u8() -> tuple[bool, str]:
   """Return true if no issues occur
@@ -169,7 +180,8 @@ def _test_efloat() -> tuple[bool, str]:
 
 TESTS = [_test_single, _test_double, _test_efloat, 
          _test_u8, _test_i8, _test_u16, _test_i16, 
-         _test_u32, _test_i32, _test_u64, _test_i64]
+         _test_u32, _test_i32, _test_u64, _test_i64,
+         _test_str]
 
 if __name__ == "__main__":
   passed:bool = True

@@ -297,15 +297,28 @@ class String:
   def pack(cls, content:str, big_endian:bool=False) -> bytes:
     
     # per https://www.ni.com/en/support/documentation/supplemental/07/tdms-file-format-internal-structure.html
-    content_stripped:str = content.rstrip()
-    return len(content_stripped).to_bytes(length=4, byteorder='big' if big_endian else 'little') + content_stripped.encode('utf-8')
+    return len(content).to_bytes(length=4, byteorder='big' if big_endian else 'little') + content.encode('utf-8')
   
   @classmethod
-  def unpack(cls, stream:BinaryIO, big_endian:bool=False) -> str:
+  @overload
+  def unpack(cls, content:BinaryIO, big_endian:bool=False) -> str:
+    ...
+  @classmethod
+  @overload
+  def unpack(cls, content:bytes|bytearray, big_endian:bool=False) -> str:
+    ...
+  @classmethod
+  def unpack(cls, content:BinaryIO|bytes|bytearray, big_endian:bool=False) -> str:
     
-    # see String.pack
-    str_length = Number.unpack_uint(stream.read(4), big_endian=big_endian)
-    return stream.read(str_length).decode('utf-8')
+    if isinstance(content, BinaryIO):
+      str_length = Number.unpack_uint(content.read(4), big_endian=big_endian)
+      return content.read(str_length).decode('utf-8')
+    
+    if len(content) < 4:
+      raise TypeError(f"Bytes provided to String.unpack do not contain a valid 32-bit integer (hex={content.hex()})")
+    str_length = Number.unpack_uint(content[0:4], big_endian=big_endian)
+    if str_length == 0: return ""
+    return content[4:4+str_length].decode('utf-8')
   
   @classmethod
   def parse_path(cls, path:str) -> tuple[str|None, str|None]:
