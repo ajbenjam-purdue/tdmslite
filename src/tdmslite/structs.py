@@ -2,16 +2,24 @@ from __future__ import annotations
 from enum import Enum, IntEnum
 from array import array
 from collections.abc import Sequence
-from typing import Iterable, Self, BinaryIO
+from typing import Iterable, Self, BinaryIO, overload, Literal
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from math import nan, inf, ldexp
+from math import nan, inf, ldexp, frexp, isnan, isinf, copysign
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Iterator, Self
 from array import array
 from sys import byteorder as SYSTEM_BYTEORDER
 import struct
+
+
+# Helpers
+def _byteorder(big_endian:bool) -> Literal['little', 'big']:
+  return 'big' if big_endian else 'little'
+
+def _endian(big_endian:bool) -> Literal['<', '>']:
+  return '>' if big_endian else '<'
 
 
 # Type definitions
@@ -148,18 +156,21 @@ class TDMSDataTypes(IntEnum):
         return(Number.unpack_int(stream.read(8), big_endian=big_endian))
       case TDMSDataTypes.tdsTypeU64:
         return(Number.unpack_uint(stream.read(8), big_endian=big_endian))
-      case TDMSDataTypes.tdsTypeSingleFloat | TDMSDataTypes.tdsTypeSingleFloatWithUnit:
+      case TDMSDataTypes.tdsTypeSingleFloat | \
+        TDMSDataTypes.tdsTypeSingleFloatWithUnit:
         return(Number.unpack_sfloat(stream.read(4), big_endian=big_endian))
       case TDMSDataTypes.tdsTypeComplexSingleFloat:
         return(Number.unpack_csfloat(stream.read(8), big_endian=big_endian))
-      case TDMSDataTypes.tdsTypeDoubleFloat | TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
+      case TDMSDataTypes.tdsTypeDoubleFloat | \
+        TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
         return(Number.unpack_dfloat(stream.read(8), big_endian=big_endian))
       case TDMSDataTypes.tdsTypeComplexDoubleFloat:
         return(Number.unpack_cdfloat(stream.read(16), big_endian=big_endian))
-      case TDMSDataTypes.tdsTypeExtendedFloat | TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
+      case TDMSDataTypes.tdsTypeExtendedFloat | \
+        TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
         return(Number.unpack_efloat(stream.read(10), big_endian=big_endian))
       case TDMSDataTypes.tdsTypeTimeStamp:
-        return(Timestamp.from_bytes(stream.read(16), big_endian=big_endian))
+        return(Timestamp.unpack(stream.read(16), big_endian=big_endian))
       case TDMSDataTypes.tdsTypeFixedPoint:
         raise NotImplementedError("Fixed point values are not supported by NI in TDMS")
       case _:
@@ -355,42 +366,70 @@ class Number:
   max_u64_bytes:bytes = b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF'
   max_u64:int = int.from_bytes(max_u64_bytes)
   
-  
+    
   @classmethod
-  def pack_u32(cls, content:int, big_endian:bool=False) -> bytes:
-    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=4)
-  
+  def pack_i8(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=True, length=1)
+      
+  @classmethod
+  def pack_i16(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=True, length=2)
+
   @classmethod
   def pack_i32(cls, content:int, big_endian:bool=False) -> bytes:
-    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=True, length=4)
-  
-  @classmethod
-  def pack_u64(cls, content:int, big_endian:bool=False) -> bytes:
-    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=False, length=8)
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=True, length=4)
   
   @classmethod
   def pack_i64(cls, content:int, big_endian:bool=False) -> bytes:
-    return content.to_bytes(byteorder='big' if big_endian else 'little', signed=True, length=8)
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=True, length=8)
+  
+  @classmethod
+  def pack_u8(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=False, length=1)
+  
+  @classmethod
+  def pack_u16(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=False, length=2)
+  
+  @classmethod
+  def pack_u32(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=False, length=4)
+  
+  @classmethod
+  def pack_u64(cls, content:int, big_endian:bool=False) -> bytes:
+    return content.to_bytes(byteorder=_byteorder(big_endian), signed=False, length=8)
+  
+  @classmethod
+  def pack_hfloat(cls, content:float, big_endian:bool=False) -> bytes:
+    return struct.pack(_endian(big_endian)+'e', content)
+  
+  @classmethod
+  def pack_sfloat(cls, content:float, big_endian:bool=False) -> bytes:
+    return struct.pack(_endian(big_endian)+'f', content)
+  
+  @classmethod
+  def pack_dfloat(cls, content:float, big_endian:bool=False) -> bytes:
+    return struct.pack(_endian(big_endian)+'d', content)
   
   @classmethod
   def unpack_uint(cls, content:bytes|bytearray, big_endian:bool=False) -> int:
-    return int.from_bytes(content, 'big' if big_endian else 'little', signed=False)
+    return int.from_bytes(content, _byteorder(big_endian), signed=False)
   
   @classmethod
   def unpack_int(cls, content:bytes|bytearray, big_endian:bool=False) -> int:
-    return int.from_bytes(content, 'big' if big_endian else 'little', signed=True)
+    return int.from_bytes(content, _byteorder(big_endian), signed=True)
   
   @classmethod
   def unpack_hfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
-    return struct.unpack(('>' if big_endian else '<')+'e', content)[0]
+    return struct.unpack(_endian(big_endian)+'e', content)[0]
   
   @classmethod
   def unpack_sfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
-    return struct.unpack(('>' if big_endian else '<')+'f', content)[0]
+    return struct.unpack(_endian(big_endian)+'f', content)[0]
   
   @classmethod
   def unpack_dfloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
-    return struct.unpack(('>' if big_endian else '<')+'d', content)[0]
+    return struct.unpack(_endian(big_endian)+'d', content)[0]
   
   @classmethod
   def unpack_efloat(cls, content:bytes|bytearray, big_endian:bool=False) -> float:
@@ -433,6 +472,61 @@ class Number:
       return ldexp(sign * frac, exponent)
     except:
       return inf if sign > 0 else -inf
+  
+  @classmethod
+  def pack_efloat(cls, content:float, big_endian:bool=False) -> bytes:
+    # nan check
+    if isnan(content):
+      if big_endian: return b'\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+      else: return b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f'
+    
+    # inf check
+    if isinf(content):
+      
+      sign_bit = 0x8000 if content < 0 else 0x0000
+      exp = 0x7FFF
+      
+      # For infinity, the integer bit (MSB) must be 1, the rest 0
+      mantissa = 0x8000000000000000
+      high = sign_bit | exp
+      if big_endian: return struct.pack('>H Q', high, mantissa)
+      return struct.pack('<Q H', mantissa, high)
+        
+    if content == 0.0:
+      sign_bit = 0x8000 if copysign(1, content) < 0 else 0x0000
+      if big_endian:
+        return struct.pack('>H Q', sign_bit, 0)
+      return struct.pack('<Q H', 0, sign_bit)
+
+    # Get sign
+    sign_bit = 0x8000 if content < 0 else 0x0000
+    abs_val = abs(content)
+
+    # Get mantissa and exponent
+    fraction, exponent = frexp(abs_val)
+    
+    # Scale fraction to fit into a 64-bit integer
+    mantissa = int(fraction * (1 << 64))
+    biased_exp = (exponent - 1) + 16383
+    
+    # Subnormal
+    if biased_exp <= 0:
+      
+      # Shift mantissa
+      shift = 1 - biased_exp
+      if shift >= 64:
+        mantissa = 0
+      else:
+        mantissa >>= shift
+      
+      biased_exp = 0
+
+    high = sign_bit | biased_exp
+    
+    if big_endian:
+      return struct.pack('>H Q', high, mantissa)
+    else:
+      return struct.pack('<Q H', mantissa, high)
 
   @classmethod
   def unpack_fixed(cls, content:bytes|bytearray, word_length:int, int_word_length:int, signed:bool, big_endian:bool=False) -> float:
@@ -577,9 +671,27 @@ class Number:
 
 class Boolean:
   
+  @overload
   @classmethod
-  def unpack(cls, stream:BinaryIO) -> bool:
-    return stream.read(1) == b'\x01'
+  def unpack(cls, content:BinaryIO) -> bool:
+    ...
+  
+  @overload
+  @classmethod
+  def unpack(cls, content:bytes|bytearray) -> bool:
+    ...
+  
+  @classmethod
+  def unpack(cls, content:BinaryIO|bytes|bytearray) -> bool:
+    if isinstance(content, BinaryIO):
+      return content.read(1) == b'\x01'
+    if isinstance(content, (bytes, bytearray)):
+      return content > b'\x00'
+    raise NotImplementedError(f"Cannot unpack type {type(content)} into boolean")
+  
+  @classmethod
+  def pack(cls, val:bool) -> bytes:
+    return struct.pack('?', val)
   
   class BooleanArray(TDMSArray):
     """Boolean array container providing interface to Python boolean objects
@@ -627,7 +739,7 @@ class Timestamp:
   TWO_POW_64 = 1 << 64
 
   @classmethod
-  def from_bytes(cls, content: bytes|bytearray, big_endian: bool) -> datetime:
+  def unpack(cls, content: bytes|bytearray, big_endian: bool) -> datetime:
     fraction = Number.unpack_uint(content[0:8], big_endian=big_endian)
     seconds = Number.unpack_int(content[8:16], big_endian=big_endian)
     microseconds = round(fraction * 1_000_000 / cls.TWO_POW_64)
@@ -635,7 +747,7 @@ class Timestamp:
     return cls.EPOCH + timedelta(seconds=seconds, microseconds=microseconds)
 
   @classmethod
-  def to_bytes(cls, dt: datetime, big_endian: bool) -> bytes:
+  def pack(cls, dt: datetime, big_endian: bool) -> bytes:
     delta = dt.astimezone(timezone.utc) - cls.EPOCH
     
     # int seconds elapsed
@@ -677,7 +789,7 @@ class Timestamp:
       if index < 0 or index >= len(self):
         raise IndexError(f"Index {index} out of bounds for length {len(self)}")
       offset = index * self.ITEM_SIZE_BYTES
-      return Timestamp.from_bytes(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
+      return Timestamp.unpack(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
 
