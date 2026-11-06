@@ -7,8 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from math import nan, inf, ldexp, frexp, isnan, isinf, copysign
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
-from typing import Any, Iterator, Self
+from typing import Any, Iterator, Self, Protocol, runtime_checkable
 from array import array
 from sys import byteorder as SYSTEM_BYTEORDER
 import struct
@@ -23,8 +22,12 @@ def _endian(big_endian:bool) -> Literal['<', '>']:
 
 
 # Type definitions
-type TDMSMetadataObjectValue = int | float | str | bool | complex | datetime
+type TDMSPyObject = int | float | str | bool | complex | datetime
 
+@runtime_checkable
+class TDMSConvertable(Protocol):
+  def get_TDMSPyObject(self) -> TDMSPyObject:
+    ...
 
 # Enum classes
 class TOCFlag(Enum):
@@ -122,7 +125,7 @@ class TDMSDataTypes(IntEnum):
   tdsTypeComplexDoubleFloat    = 0x10000D
   tdsTypeDAQmxRawData          = 0xFFFFFFFF
   
-  def unpack(self, stream:BinaryIO, big_endian:bool) -> TDMSMetadataObjectValue:
+  def unpack(self, stream:BinaryIO, big_endian:bool) -> TDMSPyObject:
     """Unpack a corresponding value from the provided stream
 
     Args:
@@ -133,7 +136,7 @@ class TDMSDataTypes(IntEnum):
         NotImplementedError: Raised if an unsupported unit (DAQmxRawData) is attempted to be unpacked
 
     Returns:
-        TDMSMetadataObjectValue: A corresponding plain python value of the binary representation
+        TDMSPyObject: A corresponding plain python value of the binary representation
     """
     match self:
       case TDMSDataTypes.tdsTypeString:
@@ -189,8 +192,8 @@ class TDMSRawDataLayout:
 class TDMSMetadataObject:
   path:       str
   raw_layout: TDMSRawDataLayout | None = None
-  properties: dict[str, TDMSMetadataObjectValue] = \
-    field(default_factory=dict[str, TDMSMetadataObjectValue])
+  properties: dict[str, TDMSPyObject] = \
+    field(default_factory=dict[str, TDMSPyObject])
 
 
 # Data storage interface classes
@@ -374,12 +377,55 @@ class String:
 
 class Number:
   
+  max_u8_bytes:bytes = b'\xFF'
+  max_u8:int = int.from_bytes(max_u8_bytes, byteorder='big')
+  max_u16_bytes:bytes = b'\xFF\xFF'
+  max_u16:int = int.from_bytes(max_u16_bytes, byteorder='big')
   max_u32_bytes:bytes = b'\xFF\xFF\xFF\xFF'
-  max_u32:int = int.from_bytes(max_u32_bytes)
+  max_u32:int = int.from_bytes(max_u32_bytes, byteorder='big')
   max_u64_bytes:bytes = b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF'
-  max_u64:int = int.from_bytes(max_u64_bytes)
+  max_u64:int = int.from_bytes(max_u64_bytes, byteorder='big')
   
-    
+  max_i8_bytes:bytes = b'\x7F'
+  max_i8:int = int.from_bytes(max_i8_bytes, byteorder='little', signed=True)
+  max_i16_bytes:bytes = b'\xFF\x7F'
+  max_i16:int = int.from_bytes(max_i16_bytes, byteorder='little', signed=True)
+  max_i32_bytes:bytes = b'\xFF\xFF\xFF\x7F'
+  max_i32:int = int.from_bytes(max_i32_bytes, byteorder='little', signed=True)
+  max_i64_bytes:bytes = b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x7F'
+  max_i64:int = int.from_bytes(max_i64_bytes, byteorder='little', signed=True)
+  
+  min_i8_bytes:bytes = b'\x80'
+  min_i8:int = int.from_bytes(min_i8_bytes, byteorder='little', signed=True)
+  min_i16_bytes:bytes = b'\x00\x80'
+  min_i16:int = int.from_bytes(min_i16_bytes, byteorder='little', signed=True)
+  min_i32_bytes:bytes = b'\x00\x00\x00\x80'
+  min_i32:int = int.from_bytes(min_i32_bytes, byteorder='little', signed=True)
+  min_i64_bytes:bytes = b'\x00\x00\x00\x00\x00\x00\x00\x80'
+  min_i64:int = int.from_bytes(min_i64_bytes, byteorder='little', signed=True)
+  
+  # Generics
+  @classmethod
+  def pack_generic_uint(cls, content:int, big_endian:bool=False) -> bytes:
+    if content > cls.max_u64: raise RuntimeError(f"Cannot encode an unsigned integer greater than {cls.max_u64}")
+    if content < 0:           raise RuntimeError(f"Cannot encode a negative unsigned integer")
+    if content > cls.max_u32: return cls.pack_u64(content, big_endian=big_endian)
+    if content > cls.max_u16: return cls.pack_u32(content, big_endian=big_endian)
+    if content > cls.max_u8:  return cls.pack_u16(content, big_endian=big_endian)
+    return cls.pack_u8(content, big_endian=big_endian)
+  
+  @classmethod
+  def pack_generic_int(cls, content:int, big_endian:bool=False) -> bytes:
+    if content > cls.max_i64:   raise RuntimeError(f"Cannot encode a signed integer greater than {cls.max_i64}")
+    if content < cls.min_i64:   raise RuntimeError(f"Cannot encode a signed integer less than {cls.min_i64}")
+    if content > cls.max_i32 \
+      or content < cls.min_i32: return cls.pack_u64(content, big_endian=big_endian)
+    if content > cls.max_i16 \
+      or content < cls.min_i16: return cls.pack_u32(content, big_endian=big_endian)
+    if content > cls.max_i8 \
+      or content < cls.min_i8:  return cls.pack_u16(content, big_endian=big_endian)
+    return cls.pack_i8(content, big_endian=big_endian)
+  
   @classmethod
   def pack_i8(cls, content:int, big_endian:bool=False) -> bytes:
     return content.to_bytes(byteorder=_byteorder(big_endian), signed=True, length=1)
@@ -421,9 +467,74 @@ class Number:
     return struct.pack(_endian(big_endian)+'f', content)
   
   @classmethod
+  def pack_csfloat(cls, content:complex, big_endian:bool=False) -> bytes:
+    return cls.pack_sfloat(content.real, big_endian=big_endian) + \
+      cls.pack_sfloat(content.imag, big_endian=big_endian)
+  
+  @classmethod
   def pack_dfloat(cls, content:float, big_endian:bool=False) -> bytes:
     return struct.pack(_endian(big_endian)+'d', content)
-  
+    
+  @classmethod
+  def pack_cdfloat(cls, content:complex, big_endian:bool=False) -> bytes:
+    return cls.pack_dfloat(content.real, big_endian=big_endian) + \
+      cls.pack_dfloat(content.imag, big_endian=big_endian)
+      
+  @classmethod
+  def pack_efloat(cls, content:float, big_endian:bool=False) -> bytes:
+    # nan check
+    if isnan(content):
+      if big_endian: return b'\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff'
+      else: return b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f'
+    
+    # inf check
+    if isinf(content):
+      
+      sign_bit = 0x8000 if content < 0 else 0x0000
+      exp = 0x7FFF
+      
+      # For infinity, the integer bit (MSB) must be 1, the rest 0
+      mantissa = 0x8000000000000000
+      high = sign_bit | exp
+      if big_endian: return struct.pack('>H Q', high, mantissa)
+      return struct.pack('<Q H', mantissa, high)
+        
+    if content == 0.0:
+      sign_bit = 0x8000 if copysign(1, content) < 0 else 0x0000
+      if big_endian:
+        return struct.pack('>H Q', sign_bit, 0)
+      return struct.pack('<Q H', 0, sign_bit)
+
+    # Get sign
+    sign_bit = 0x8000 if content < 0 else 0x0000
+    abs_val = abs(content)
+
+    # Get mantissa and exponent
+    fraction, exponent = frexp(abs_val)
+    
+    # Scale fraction to fit into a 64-bit integer
+    mantissa = int(fraction * (1 << 64))
+    biased_exp = (exponent - 1) + 16383
+    
+    # Subnormal
+    if biased_exp <= 0:
+      
+      # Shift mantissa
+      shift = 1 - biased_exp
+      if shift >= 64:
+        mantissa = 0
+      else:
+        mantissa >>= shift
+      
+      biased_exp = 0
+
+    high = sign_bit | biased_exp
+    
+    if big_endian:
+      return struct.pack('>H Q', high, mantissa)
+    else:
+      return struct.pack('<Q H', mantissa, high)
+
   @classmethod
   def unpack_uint(cls, content:bytes|bytearray, big_endian:bool=False) -> int:
     return int.from_bytes(content, _byteorder(big_endian), signed=False)
@@ -486,61 +597,6 @@ class Number:
     except:
       return inf if sign > 0 else -inf
   
-  @classmethod
-  def pack_efloat(cls, content:float, big_endian:bool=False) -> bytes:
-    # nan check
-    if isnan(content):
-      if big_endian: return b'\x7f\xff\xff\xff\xff\xff\xff\xff\xff\xff'
-      else: return b'\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f'
-    
-    # inf check
-    if isinf(content):
-      
-      sign_bit = 0x8000 if content < 0 else 0x0000
-      exp = 0x7FFF
-      
-      # For infinity, the integer bit (MSB) must be 1, the rest 0
-      mantissa = 0x8000000000000000
-      high = sign_bit | exp
-      if big_endian: return struct.pack('>H Q', high, mantissa)
-      return struct.pack('<Q H', mantissa, high)
-        
-    if content == 0.0:
-      sign_bit = 0x8000 if copysign(1, content) < 0 else 0x0000
-      if big_endian:
-        return struct.pack('>H Q', sign_bit, 0)
-      return struct.pack('<Q H', 0, sign_bit)
-
-    # Get sign
-    sign_bit = 0x8000 if content < 0 else 0x0000
-    abs_val = abs(content)
-
-    # Get mantissa and exponent
-    fraction, exponent = frexp(abs_val)
-    
-    # Scale fraction to fit into a 64-bit integer
-    mantissa = int(fraction * (1 << 64))
-    biased_exp = (exponent - 1) + 16383
-    
-    # Subnormal
-    if biased_exp <= 0:
-      
-      # Shift mantissa
-      shift = 1 - biased_exp
-      if shift >= 64:
-        mantissa = 0
-      else:
-        mantissa >>= shift
-      
-      biased_exp = 0
-
-    high = sign_bit | biased_exp
-    
-    if big_endian:
-      return struct.pack('>H Q', high, mantissa)
-    else:
-      return struct.pack('<Q H', mantissa, high)
-
   @classmethod
   def unpack_fixed(cls, content:bytes|bytearray, word_length:int, int_word_length:int, signed:bool, big_endian:bool=False) -> float:
     integer = cls.unpack_int(content=content, big_endian=big_endian)
@@ -698,9 +754,7 @@ class Boolean:
   def unpack(cls, content:BinaryIO|bytes|bytearray) -> bool:
     if isinstance(content, BinaryIO):
       return content.read(1) == b'\x01'
-    if isinstance(content, (bytes, bytearray)):
-      return content > b'\x00'
-    raise NotImplementedError(f"Cannot unpack type {type(content)} into boolean")
+    return content > b'\x00'
   
   @classmethod
   def pack(cls, val:bool) -> bytes:
@@ -804,6 +858,40 @@ class Timestamp:
       offset = index * self.ITEM_SIZE_BYTES
       return Timestamp.unpack(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
+
+
+# Generic packer
+def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> bytes:
+  """Pack a vanilla python object or a convertable class (has a get_TDMSPyObject method) into bytes
+
+  Args:
+      obj (TDMSPyObject | TDMSConvertable): The generic object to pack
+      big_endian (bool, optional): The endianness of the operation. Defaults to False.
+
+  Returns:
+      bytes: The constructed bytes object
+  """
+  if isinstance(obj, TDMSConvertable):
+    _TDMSPyObject = obj.get_TDMSPyObject()
+  else:
+    _TDMSPyObject = obj
+  match _TDMSPyObject:
+    case bool():
+      return Boolean.pack(_TDMSPyObject)
+    case int():
+      if _TDMSPyObject < 0:
+        return Number.pack_generic_int(_TDMSPyObject, big_endian=big_endian)
+      else:
+        return Number.pack_generic_uint(_TDMSPyObject, big_endian=big_endian)
+    case float():
+      return Number.pack_dfloat(_TDMSPyObject, big_endian=big_endian)
+    case str():
+      return String.pack(_TDMSPyObject, big_endian=big_endian)
+    case complex():
+      return Number.pack_cdfloat(_TDMSPyObject, big_endian=big_endian)
+    case datetime():
+      return Timestamp.pack(_TDMSPyObject, big_endian=big_endian)
+    case _: raise TypeError(f"Unsupported _TDMSPyObject type: {type(_TDMSPyObject)}")
 
 
 # Import aliases

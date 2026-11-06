@@ -3,7 +3,7 @@ from pathlib import Path
 from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
-  TDMSMetadataObjectValue, TDMSArray
+  TDMSPyObject, TDMSConvertable, TDMSArray
 from logging import getLogger
 
 logger = getLogger(__name__)
@@ -97,7 +97,7 @@ class TDMSMetadata:
       
       # Unpack the properties per-object
       n_properties = Number.unpack_uint(stream.read(4), big_endian=big_endian)
-      properties:dict[str, TDMSMetadataObjectValue] = {}
+      properties:dict[str, TDMSPyObject] = {}
       
       for _ in range(n_properties):
         
@@ -121,7 +121,7 @@ class TDMSChannel:
     self.name = name
     self.path = path
     self.data_type = data_type
-    self.properties:dict[str,TDMSMetadataObjectValue] = {}
+    self.properties:dict[str,TDMSPyObject] = {}
     self.data:TDMSArray|None = None
   
   def add_data(self, chunk:TDMSArray) -> None:
@@ -153,7 +153,7 @@ class TDMSGroup:
   
   def __init__(self, name: str) -> None:
     self.name: str = name
-    self.properties: dict[str,TDMSMetadataObjectValue] = {}
+    self.properties: dict[str,TDMSPyObject] = {}
     self.channels: dict[str, TDMSChannel] = {}
 
   def __getitem__(self, channel_name: str) -> TDMSChannel:
@@ -233,7 +233,7 @@ class TDMSDocument:
     Args:
         stream (BinaryIO): The readable buffer to create the TDMSDocument from
     """
-    self.properties: dict[str, TDMSMetadataObjectValue] = {}
+    self.properties: dict[str, TDMSPyObject] = {}
     self.groups: dict[str, TDMSGroup] = {}
 
     # Persistant state
