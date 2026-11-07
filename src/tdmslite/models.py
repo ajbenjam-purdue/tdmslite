@@ -268,22 +268,27 @@ class TDMSSegment:
 
   def _read_raw_data(self) -> int:
     total_read_bytes:int = 0
+    total_segment_bytes = self.lead_in.next_segment - self.lead_in.raw_data_offset
     
-    # For each object, create the corresponding array
-    for obj in self.objects:
-      
-      # Object lacks data, ignore
-      if not obj.raw_layout or obj.raw_layout.n_vals == 0:
-        continue
+    while total_read_bytes < total_segment_bytes:
+      # For each object, create the corresponding array
+      for obj in self.objects:
+        
+        # Object lacks data, ignore
+        if not obj.raw_layout or obj.raw_layout.n_vals == 0:
+          continue
 
-      # Create array object
-      bytes_read, chunk = TDMSArray.from_stream(
-        self.stream, obj.raw_layout.data_type, obj.raw_layout.n_vals, 
-        obj.raw_layout.total_bytes, self.lead_in.big_endian)
-      
-      # Save array object
-      self.raw_chunks[obj.path] = chunk
-      total_read_bytes += bytes_read
+        # Create array object
+        bytes_read, chunk = TDMSArray.from_stream(
+          self.stream, obj.raw_layout.data_type, obj.raw_layout.n_vals, 
+          obj.raw_layout.total_bytes, self.lead_in.big_endian)
+        
+        # Save array object
+        if obj.path not in self.raw_chunks:
+          self.raw_chunks[obj.path] = chunk
+        else:
+          self.raw_chunks[obj.path].extend(chunk)
+        total_read_bytes += bytes_read
       
     return total_read_bytes
 
