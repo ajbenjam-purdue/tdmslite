@@ -502,10 +502,11 @@ class String:
       return iter(self._strings)
 
     def pack(self, big_endian:bool=False) -> bytes:
-      result = b""
-      for string_bytes in [String.pack(x, big_endian=big_endian) for x in self._strings]:
-        result += string_bytes
-      return result
+      encoded_strs = [x.encode('utf-8') for x in self._strings]
+      offsets:list[int] = [len(x) for x in encoded_strs]
+      offsets = [sum(offsets[0:i+1]) for i in range(len(offsets))]
+      return b"".join([Number.pack_u32(x) for x in offsets]) + \
+        b"".join(encoded_strs)
 
 class Number:
   
@@ -799,11 +800,11 @@ class Number:
       return iter(self._raw)
 
     def pack(self, big_endian:bool=False) -> bytes:
-      result = b""
-      packing_method = self.data_type.pack
-      for num_bytes in [packing_method(x, big_endian=big_endian) for x in self._raw]:
-        result += num_bytes
-      return result 
+      if big_endian != (SYSTEM_BYTEORDER == 'big'):
+        arr = self._raw[:]
+        arr.byteswap()
+        return arr.tobytes()
+      return self._raw.tobytes()
 
   class ComplexArray(TDMSArray):
     """Complex numeric array container providing interface to Python complex floats
@@ -893,10 +894,9 @@ class Number:
         yield Number.unpack_efloat(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
 
     def pack(self, big_endian:bool=False) -> bytes:
-      result = b""
-      for num_bytes in [Number.pack_efloat(x, big_endian=big_endian) for x in self._raw]:
-        result += num_bytes
-      return result
+      return bytes(self._raw) if big_endian == self.big_endian else \
+        b"".join(self._raw[i:i+self.ITEM_SIZE_BYTES][::-1] \
+        for i in range(0, len(self._raw), self.ITEM_SIZE_BYTES))
 
 class Boolean:
   
@@ -1024,7 +1024,7 @@ class Timestamp:
 
     def __iter__(self) -> Iterator[datetime]:
       for i in range(0, len(self._raw), self.ITEM_SIZE_BYTES):
-        yield Timestamp.unpack(self._raw[i:i+10], big_endian=self.big_endian)
+        yield Timestamp.unpack(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
 
     def pack(self, big_endian:bool=False) -> bytes:
       return bytes(self._raw)
