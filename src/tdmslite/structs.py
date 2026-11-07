@@ -267,6 +267,36 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
+  @property
+  def n_bytes(self) -> int:
+    """Get the expected size of a member of this type
+
+    Returns:
+        int: The size, in bytes, of a member of this class. -1 if dynamic or unknown.
+    """
+    match self:
+      case TDMSDataTypes.tdsTypeVoid:                  return -1
+      case TDMSDataTypes.tdsTypeI8:                    return 1
+      case TDMSDataTypes.tdsTypeI16:                   return 2
+      case TDMSDataTypes.tdsTypeI32:                   return 4
+      case TDMSDataTypes.tdsTypeI64:                   return 8
+      case TDMSDataTypes.tdsTypeU8:                    return 1
+      case TDMSDataTypes.tdsTypeU16:                   return 2
+      case TDMSDataTypes.tdsTypeU32:                   return 4
+      case TDMSDataTypes.tdsTypeU64:                   return 8
+      case TDMSDataTypes.tdsTypeSingleFloat:           return 4
+      case TDMSDataTypes.tdsTypeDoubleFloat:           return 8
+      case TDMSDataTypes.tdsTypeExtendedFloat:         return 10
+      case TDMSDataTypes.tdsTypeSingleFloatWithUnit:   return 4
+      case TDMSDataTypes.tdsTypeDoubleFloatWithUnit:   return 8
+      case TDMSDataTypes.tdsTypeExtendedFloatWithUnit: return 10
+      case TDMSDataTypes.tdsTypeString:                return -1
+      case TDMSDataTypes.tdsTypeBoolean:               return 1
+      case TDMSDataTypes.tdsTypeTimeStamp:             return 16
+      case TDMSDataTypes.tdsTypeFixedPoint:            return -1
+      case TDMSDataTypes.tdsTypeComplexSingleFloat:    return 8
+      case TDMSDataTypes.tdsTypeComplexDoubleFloat:    return 16
+      case TDMSDataTypes.tdsTypeDAQmxRawData:          return -1
 
 # Data container classes
 @dataclass
@@ -753,7 +783,7 @@ class Number:
     def __getitem__(self, index: int | slice[Any, Any, Any]) -> Any:
       return self._raw[index]
     
-    def __iter__(self) -> Iterator[Any]:
+    def __iter__(self) -> Iterator[float]:
       return iter(self._raw)
 
   class ComplexArray(TDMSArray):
@@ -794,6 +824,12 @@ class Number:
         raise IndexError(f"Index {index} out of bounds for length {len(self)}")
       return complex(self._raw[2 * index], self._raw[2 * index + 1])
 
+    # TODO: Fix
+    # def __iter__(self) -> Iterator[complex]:
+    #   unpacking_method = self.data_type.unpack
+    #   data_size = self.data_type.n_bytes
+    #   for i in range(0, len(self._raw), data_size):
+    #     yield unpacking_method(self._raw[i:i+data_size], big_endian=False)
   class ExtendedFloatArray(TDMSArray):
     """Quad/80b array container providing interface to Python floats
     """
@@ -828,6 +864,9 @@ class Number:
       return Number.unpack_efloat(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
+    def __iter__(self) -> Iterator[float]:
+      for i in range(len(self._raw)):
+        yield Number.unpack_efloat(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
 class Boolean:
   
   @overload
@@ -949,6 +988,8 @@ class Timestamp:
       return Timestamp.unpack(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
+    # def __iter__(self) -> Iterator[complex]:
+    #   return iter(self._raw) # TODO: Fix
 
 # Generic packer
 def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
