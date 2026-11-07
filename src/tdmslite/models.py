@@ -3,7 +3,7 @@ from pathlib import Path
 from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
-  TDMSPyObject, TDMSConvertable, TDMSArray
+  TDMSPyObject, TDMSArray, TDMS_pack
 from logging import getLogger
 
 logger = getLogger(__name__)
@@ -113,6 +113,39 @@ class TDMSMetadata:
       # Create the object and add it to objects list
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
 
+  def to_bytes(self, big_endian:bool=False) -> bytes:
+    """Pack a TDMSMetadata's object to bytes"""
+    result:bytes = Number.pack_u32(len(self.objects), big_endian=big_endian)
+    
+    for object in self.objects:
+      
+      result += String.pack(object.path, big_endian=big_endian) # Path
+      
+      # Raw layout
+      if not object.raw_layout:
+        result += Number.pack_u32(0xFFFFFFFF, big_endian=big_endian) # None attached
+      else:
+        result += Number.pack_u32(28 if object.raw_layout.data_type == TDMSDataTypes.tdsTypeString
+                                  else 20, big_endian=big_endian) # Weird little length index thing
+        result += Number.pack_u32(object.raw_layout.data_type, big_endian=big_endian) # Data type
+        result += Number.pack_u32(object.raw_layout.dim, big_endian=big_endian) # Dimension
+        result += Number.pack_u64(object.raw_layout.n_vals, big_endian=big_endian) # Number of values
+        if object.raw_layout.data_type == TDMSDataTypes.tdsTypeString:
+          result += Number.pack_u64(object.raw_layout.total_bytes, big_endian=big_endian) # Bytes (string)
+      
+      result += Number.pack_u32(len(object.properties), big_endian=big_endian) # Number of properties
+      for prop_name, prop_value in object.properties.items():
+        result += String.pack(prop_name, big_endian=big_endian) # Property name
+        prop_bytes, prop_type = TDMS_pack(prop_value, big_endian=big_endian)
+        result += Number.pack_u32(prop_type, big_endian=big_endian)
+        result += prop_bytes
+    
+    return result
+
+  # @classmethod
+  # def create(cls) -> 'TDMSMetadata':
+  #   return TDMSMetadata()
+  
 class TDMSChannel:
   """Physical Channel container class
   """
