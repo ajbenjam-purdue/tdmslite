@@ -409,3 +409,48 @@ class TDMSDocument:
     """
     return f"TDMSDocument(Properties={self.properties}, " \
       f"Groups=[{", ".join([repr(group) for group in self.groups.values()])}])"
+
+  def to_bytes(self, big_endian:bool=False) -> bytes:
+    """Packs a document into a single bytes object. 
+
+    Returns:
+        bytes: The resulting bytes, including the lead-in, metadata, and raw data if applicable. 
+    """
+    root_object = TDMSMetadataObject("/", None, self.properties)
+    
+    raw_bytes = b""
+    channel_objects:list[TDMSMetadataObject] = []
+    for group in self.groups.values():
+      for channel in group.channels.values():
+        chan_bytes = b""
+        n_vals = 0
+        
+        if channel.data: 
+          chan_bytes = channel.data.pack(big_endian=big_endian)
+          n_vals = len(channel.data)
+        if not channel.data_type:
+          logger.error(f"Channel {channel.name} on path {channel.path} does not have a "
+                       "defined type (skipping)")
+          continue
+        
+        channel_objects.append(TDMSMetadataObject(
+          channel.path, TDMSRawDataLayout(channel.data_type, 1, n_vals, len(chan_bytes))))
+        raw_bytes += chan_bytes
+    
+    meta_bytes = TDMSMetadata([root_object] + channel_objects).to_bytes(big_endian=big_endian)
+    
+    lead_in = TDMSLeadIn()
+    lead_in.big_endian = big_endian
+    lead_in.interleaved = False # TODO: implement
+    lead_in.version = TOCVersion.TDMS_2
+    lead_in.raw_data_offset = len(meta_bytes)
+    lead_in.next_segment = len(meta_bytes) + lead_in.raw_data_offset
+    
+    # TOC
+    lead_in.members = [TOCFlag.kTocMetaData, TOCFlag.kTocNewObjList]
+    if len(raw_bytes) > 0:
+      lead_in.members.append(TOCFlag.kTocRawData)
+    if big_endian:
+      lead_in.members.append(TOCFlag.kTocBigEndian)
+    
+    return lead_in.to_bytes() + meta_bytes + raw_bytes
