@@ -26,6 +26,7 @@ type TDMSPyObject = int | float | str | bool | complex | datetime
 
 @runtime_checkable
 class TDMSConvertable(Protocol):
+  """Generic container for a class that adds a get_TDMSPyObject -> TDMSPyObject method for serialization"""
   def get_TDMSPyObject(self) -> TDMSPyObject:
     ...
 
@@ -406,25 +407,25 @@ class Number:
   
   # Generics
   @classmethod
-  def pack_generic_uint(cls, content:int, big_endian:bool=False) -> bytes:
+  def pack_generic_uint(cls, content:int, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
     if content > cls.max_u64: raise RuntimeError(f"Cannot encode an unsigned integer greater than {cls.max_u64}")
     if content < 0:           raise RuntimeError(f"Cannot encode a negative unsigned integer")
-    if content > cls.max_u32: return cls.pack_u64(content, big_endian=big_endian)
-    if content > cls.max_u16: return cls.pack_u32(content, big_endian=big_endian)
-    if content > cls.max_u8:  return cls.pack_u16(content, big_endian=big_endian)
-    return cls.pack_u8(content, big_endian=big_endian)
+    if content > cls.max_u32: return cls.pack_u64(content, big_endian=big_endian), TDMSDataTypes.tdsTypeU64
+    if content > cls.max_u16: return cls.pack_u32(content, big_endian=big_endian), TDMSDataTypes.tdsTypeU32
+    if content > cls.max_u8:  return cls.pack_u16(content, big_endian=big_endian), TDMSDataTypes.tdsTypeU16
+    return cls.pack_u8(content, big_endian=big_endian), TDMSDataTypes.tdsTypeU8
   
   @classmethod
-  def pack_generic_int(cls, content:int, big_endian:bool=False) -> bytes:
+  def pack_generic_int(cls, content:int, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
     if content > cls.max_i64:   raise RuntimeError(f"Cannot encode a signed integer greater than {cls.max_i64}")
     if content < cls.min_i64:   raise RuntimeError(f"Cannot encode a signed integer less than {cls.min_i64}")
     if content > cls.max_i32 \
-      or content < cls.min_i32: return cls.pack_u64(content, big_endian=big_endian)
+      or content < cls.min_i32: return cls.pack_i64(content, big_endian=big_endian), TDMSDataTypes.tdsTypeI64
     if content > cls.max_i16 \
-      or content < cls.min_i16: return cls.pack_u32(content, big_endian=big_endian)
+      or content < cls.min_i16: return cls.pack_i32(content, big_endian=big_endian), TDMSDataTypes.tdsTypeI32
     if content > cls.max_i8 \
-      or content < cls.min_i8:  return cls.pack_u16(content, big_endian=big_endian)
-    return cls.pack_i8(content, big_endian=big_endian)
+      or content < cls.min_i8:  return cls.pack_i16(content, big_endian=big_endian), TDMSDataTypes.tdsTypeI16
+    return cls.pack_i8(content, big_endian=big_endian), TDMSDataTypes.tdsTypeI8
   
   @classmethod
   def pack_i8(cls, content:int, big_endian:bool=False) -> bytes:
@@ -861,7 +862,7 @@ class Timestamp:
 
 
 # Generic packer
-def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> bytes:
+def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
   """Pack a vanilla python object or a convertable class (has a get_TDMSPyObject method) into bytes
 
   Args:
@@ -870,6 +871,7 @@ def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> bytes:
 
   Returns:
       bytes: The constructed bytes object
+      TDMSDataTypes: The data type of the bytes object
   """
   if isinstance(obj, TDMSConvertable):
     _TDMSPyObject = obj.get_TDMSPyObject()
@@ -877,20 +879,20 @@ def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> bytes:
     _TDMSPyObject = obj
   match _TDMSPyObject:
     case bool():
-      return Boolean.pack(_TDMSPyObject)
+      return Boolean.pack(_TDMSPyObject), TDMSDataTypes.tdsTypeBoolean
     case int():
       if _TDMSPyObject < 0:
         return Number.pack_generic_int(_TDMSPyObject, big_endian=big_endian)
       else:
         return Number.pack_generic_uint(_TDMSPyObject, big_endian=big_endian)
     case float():
-      return Number.pack_dfloat(_TDMSPyObject, big_endian=big_endian)
+      return Number.pack_dfloat(_TDMSPyObject, big_endian=big_endian), TDMSDataTypes.tdsTypeDoubleFloat
     case str():
-      return String.pack(_TDMSPyObject, big_endian=big_endian)
+      return String.pack(_TDMSPyObject, big_endian=big_endian), TDMSDataTypes.tdsTypeString
     case complex():
-      return Number.pack_cdfloat(_TDMSPyObject, big_endian=big_endian)
+      return Number.pack_cdfloat(_TDMSPyObject, big_endian=big_endian), TDMSDataTypes.tdsTypeComplexDoubleFloat
     case datetime():
-      return Timestamp.pack(_TDMSPyObject, big_endian=big_endian)
+      return Timestamp.pack(_TDMSPyObject, big_endian=big_endian), TDMSDataTypes.tdsTypeTimeStamp
     case _: raise TypeError(f"Unsupported _TDMSPyObject type: {type(_TDMSPyObject)}")
 
 
