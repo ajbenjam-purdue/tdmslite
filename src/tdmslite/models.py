@@ -8,6 +8,18 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+# Helpers
+def _bytes(byte_count:int) -> str:
+  if byte_count >= 1_000_000_000:
+    return f"{byte_count*0.000000001:.2f}GB"
+  if byte_count >= 1_000_000:
+    return f"{byte_count*0.000001:.2f}MB"
+  if byte_count >= 1_000:
+    return f"{byte_count*0.001:.2f}kB"
+  if byte_count >= 0:
+    return f"{byte_count}B"
+  raise ValueError(f"Cannot parse negtive byte count")
+
 class TDMSLeadIn:
   """Lead-in container class. References NI's documentation: "TDMS File Format Internal Structure"
   """
@@ -298,62 +310,11 @@ class TDMSDocument:
   If a file is trustworthy and present in a buffered binary IO reader, use the constructor `TDMSDocument()` directly. 
   """
   
-  def __init__(self, stream: BinaryIO) -> None:
-    """Create an in-place TDMSDocument from a BinaryIO stream
-
-    Args:
-        stream (BinaryIO): The readable buffer to create the TDMSDocument from
+  def __init__(self) -> None:
+    """Create an empty in-place TDMSDocument
     """
     self.properties: dict[str, TDMSPyObject] = {}
     self.groups: dict[str, TDMSGroup] = {}
-
-    # Persistant state
-    channel_states: dict[str, TDMSRawDataLayout] = {}
-    active_objects: list[TDMSMetadataObject] = []
-
-    # Read each segment until EOF
-    while True:
-      seg_start = stream.tell()
-      logger.info(f"Ingesting segment at position {seg_start}")
-      
-      # Delegate parsing
-      segment = TDMSSegment(stream, channel_states, active_objects)
-      if segment.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
-        segment.lead_in.integrity == TDMSLeadInIntegrity.DONE:
-        break
-      logger.info(f"Got metadata {segment.metadata}")
-      active_objects = segment.objects
-
-      # Update Document hierarchy
-      for obj in segment.objects:
-        group_name, chan_name = String.parse_path(obj.path)
-        obj_path = f"/'{group_name}'/'{chan_name}'/" if chan_name else f"/'{group_name}'/" if group_name else "/"
-        logger.info(f"Updating {obj_path}...")
-        if group_name is None and chan_name is None:
-          self.properties.update(obj.properties)
-        elif group_name and not chan_name:
-          group = self.groups.setdefault(group_name, TDMSGroup(group_name))
-          group.properties.update(obj.properties)
-        elif group_name and chan_name:
-          group = self.groups.setdefault(group_name, TDMSGroup(group_name))
-          dtype = obj.raw_layout.data_type if obj.raw_layout else None
-          if chan_name not in group.channels:
-            group.channels[chan_name] = TDMSChannel(chan_name, obj.path, dtype)
-
-          group.channels[chan_name].properties.update(obj.properties)
-        logger.info(f"Updated {obj_path} with {len(obj.properties)} properties")
-      # Add segment's chunks
-      for path, chunk in segment.raw_chunks.items():
-        group_name, chan_name = String.parse_path(path)
-        if group_name and chan_name:
-          self.groups[group_name].channels[chan_name].add_data(chunk)
-          logger.info(f"Updated {path} with {len(chunk)} items")
-
-      # EOF?
-      if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
-        logger.info(f"Segment contains EOF")
-        break
-      stream.seek(seg_start + 28 + segment.lead_in.next_segment)
   
   @classmethod
   def from_file(cls, path:str|Path) -> 'TDMSDocument':
@@ -377,9 +338,56 @@ class TDMSDocument:
     if not path.exists():
       raise FileNotFoundError(f"File at path {path} does not exist")
     
+    file = TDMSDocument()
     try:
-      with open(Path(path).resolve(), 'rb') as f:
-        file = TDMSDocument(f)
+      with open(Path(path).resolve(), 'rb') as stream:
+        # Persistant state
+        channel_states: dict[str, TDMSRawDataLayout] = {}
+        active_objects: list[TDMSMetadataObject] = []
+    
+        # Read each segment until EOF
+        while True:
+          seg_start = stream.tell()
+          logger.info(f"Ingesting segment at position {seg_start}")
+          
+          # Delegate parsing
+          segment = TDMSSegment(stream, channel_states, active_objects)
+          if segment.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
+            segment.lead_in.integrity == TDMSLeadInIntegrity.DONE:
+            break
+          logger.info(f"Got metadata {segment.metadata}")
+          active_objects = segment.objects
+    
+          # Update Document hierarchy
+          for obj in segment.objects:
+            group_name, chan_name = String.parse_path(obj.path)
+            obj_path = f"/'{group_name}'/'{chan_name}'/" if chan_name else f"/'{group_name}'/" if group_name else "/"
+            logger.info(f"Updating {obj_path}...")
+            if group_name is None and chan_name is None:
+              file.properties.update(obj.properties)
+            elif group_name and not chan_name:
+              group = file.groups.setdefault(group_name, TDMSGroup(group_name))
+              group.properties.update(obj.properties)
+            elif group_name and chan_name:
+              group = file.groups.setdefault(group_name, TDMSGroup(group_name))
+              dtype = obj.raw_layout.data_type if obj.raw_layout else None
+              if chan_name not in group.channels:
+                group.channels[chan_name] = TDMSChannel(chan_name, obj.path, dtype)
+    
+              group.channels[chan_name].properties.update(obj.properties)
+            logger.info(f"Updated {obj_path} with {len(obj.properties)} properties")
+          # Add segment's chunks
+          for path, chunk in segment.raw_chunks.items():
+            group_name, chan_name = String.parse_path(path)
+            if group_name and chan_name:
+              file.groups[group_name].channels[chan_name].add_data(chunk)
+              logger.info(f"Updated {path} with {len(chunk)} items")
+    
+          # EOF?
+          if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
+            logger.info(f"Segment contains EOF")
+            break
+          stream.seek(seg_start + 28 + segment.lead_in.next_segment)
     except Exception as e:
       raise RuntimeError(f"Encountered exception while loading TMDS file: {e}")
     return file
