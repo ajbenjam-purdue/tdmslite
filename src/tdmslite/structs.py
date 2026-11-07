@@ -332,7 +332,11 @@ class TDMSArray(Sequence[Any], ABC):
     pass
   
   @abstractmethod
-  def extend(self, other: Self) -> None:
+  def extend(self, other:Self) -> None:
+    pass
+  
+  @abstractmethod
+  def pack(self, big_endian:bool=False) -> bytes:
     pass
   
   def to_list(self) -> list[Any]:
@@ -411,7 +415,6 @@ class TDMSArray(Sequence[Any], ABC):
         return (total_bytes, arr)
 
     raise NotImplementedError(f"Unsupported data type: {data_type}")
-
 
 # Helper classes
 class String:
@@ -494,6 +497,12 @@ class String:
 
     def __iter__(self) -> Iterator[str]:
       return iter(self._strings)
+
+    def pack(self, big_endian:bool=False) -> bytes:
+      result = b""
+      for string_bytes in [String.pack(x, big_endian=big_endian) for x in self._strings]:
+        result += string_bytes
+      return result
 
 class Number:
   
@@ -786,6 +795,13 @@ class Number:
     def __iter__(self) -> Iterator[float]:
       return iter(self._raw)
 
+    def pack(self, big_endian:bool=False) -> bytes:
+      result = b""
+      packing_method = self.data_type.pack
+      for num_bytes in [packing_method(x, big_endian=big_endian) for x in self._raw]:
+        result += num_bytes
+      return result 
+
   class ComplexArray(TDMSArray):
     """Complex numeric array container providing interface to Python complex floats
     """
@@ -830,6 +846,14 @@ class Number:
     #   data_size = self.data_type.n_bytes
     #   for i in range(0, len(self._raw), data_size):
     #     yield unpacking_method(self._raw[i:i+data_size], big_endian=False)
+
+    def pack(self, big_endian:bool=False) -> bytes:
+      result = b""
+      packing_method = self.data_type.pack
+      for num_bytes in [packing_method(x, big_endian=big_endian) for x in self._raw]:
+        result += num_bytes
+      return result
+
   class ExtendedFloatArray(TDMSArray):
     """Quad/80b array container providing interface to Python floats
     """
@@ -867,6 +891,13 @@ class Number:
     def __iter__(self) -> Iterator[float]:
       for i in range(len(self._raw)):
         yield Number.unpack_efloat(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
+
+    def pack(self, big_endian:bool=False) -> bytes:
+      result = b""
+      for num_bytes in [Number.pack_efloat(x, big_endian=big_endian) for x in self._raw]:
+        result += num_bytes
+      return result
+
 class Boolean:
   
   @overload
@@ -928,6 +959,9 @@ class Boolean:
     def __iter__(self) -> Iterator[bool]:
       for b in self._raw:
         yield bool(b)
+
+    def pack(self, big_endian:bool=False) -> bytes:
+      return bytes(self._raw)
 
 class Timestamp:
   
@@ -991,6 +1025,10 @@ class Timestamp:
     # def __iter__(self) -> Iterator[complex]:
     #   return iter(self._raw) # TODO: Fix
 
+    def pack(self, big_endian:bool=False) -> bytes:
+      return bytes(self._raw)
+    
+    
 # Generic packer
 def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
   """Pack a vanilla python object or a convertable class (has a get_TDMSPyObject method) into bytes
