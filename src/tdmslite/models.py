@@ -469,3 +469,23 @@ class TDMSDocument:
       lead_in.members.append(TOCFlag.kTocBigEndian)
     
     return lead_in.to_bytes() + meta_bytes + raw_bytes
+  
+  def to_file(self, destination:Path|str, exist_ok:bool=False) -> None:
+    destination = Path(destination).resolve().with_suffix(".tdms")
+    if not exist_ok and destination.exists():
+      raise FileExistsError(f"File at {destination} already exists. "
+                            "Use TDMSDocument.to_file with the exist_ok=True"
+                            " parameter to allow for overwriting.")
+    
+    with open(destination, 'wb') as file:
+      logger.info(f"Wrote {_bytes(file.write(self.to_bytes()))} bytes to {destination}") # This may need reworked for large files
+    
+  
+  def to_csv(self, destination:Path|str, exist_ok:bool=False) -> None:
+    destination = Path(destination).resolve().with_suffix(".csv")
+    if not exist_ok and destination.exists():
+      raise FileExistsError(f"File at {destination} already exists. "
+                            "Use TDMSDocument.to_csv with the exist_ok=True"
+                            " parameter to allow for overwriting.")
+    raise NotImplementedError(f"Can't save TDMSDocument to .csv yet")
+    # TODO: Complete
