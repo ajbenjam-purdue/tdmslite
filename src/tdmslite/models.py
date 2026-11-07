@@ -85,10 +85,14 @@ class TDMSMetadata:
   """Metadata creation and container class. References NI's documentation: "TDMS File Format Internal Structure"
   """
 
-  def __init__(self, stream:BinaryIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> None:
+  def __init__(self, objects:list[TDMSMetadataObject]=[]) -> None:
+    self.objects = objects.copy()
     
+  @classmethod
+  def from_stream(cls, stream:BinaryIO, big_endian:bool, channel_states:dict[str,TDMSRawDataLayout]) -> 'TDMSMetadata':
+    
+    obj = TDMSMetadata([])
     n_objects = Number.unpack_uint(stream.read(4), big_endian=big_endian)
-    self.objects:list[TDMSMetadataObject] = []
     
     # Unpack objects in metadata
     for _ in range(n_objects):
@@ -135,8 +139,10 @@ class TDMSMetadata:
         properties[property_name] = property_value
       
       # Create the object and add it to objects list
-      self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
+      obj.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
 
+    return obj
+    
   def __repr__(self) -> str:
     return f"TDMSMetadata({",".join([x.__repr__() for x in self.objects[0:1]])+(", ..." if len(self.objects) > 1 else "")})"
 
@@ -245,7 +251,7 @@ class TDMSSegment:
 
     # Metadata
     if self.lead_in.has_metadata:
-      self.metadata = TDMSMetadata(self.stream, self.lead_in.big_endian, channel_states)
+      self.metadata = TDMSMetadata.from_stream(self.stream, self.lead_in.big_endian, channel_states)
       self.objects = self.metadata.objects
     else:
       self.metadata = None
