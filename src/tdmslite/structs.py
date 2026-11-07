@@ -244,8 +244,7 @@ class TDMSArray(Sequence[Any], ABC):
     if data_type == TDMSDataTypes.tdsTypeString:
       return String.StringArray(data_type)
     raise NotImplementedError(f"Raw data loading for {data_type.name} is not supported")
-      
-
+  
   @classmethod
   def from_stream(cls, stream: BinaryIO, data_type: TDMSDataTypes, n_values: int,
     total_bytes: int, big_endian: bool) -> tuple[int, TDMSArray]:
@@ -314,15 +313,15 @@ class String:
   @classmethod
   def unpack(cls, content:BinaryIO|bytes|bytearray, big_endian:bool=False) -> str:
     
-    if isinstance(content, BinaryIO):
-      str_length = Number.unpack_uint(content.read(4), big_endian=big_endian)
-      return content.read(str_length).decode('utf-8')
+    if isinstance(content, (bytes,bytearray)):
+      if len(content) < 4:
+        raise TypeError(f"Bytes provided to String.unpack do not contain a valid 32-bit integer (hex={content.hex()})")
+      str_length = Number.unpack_uint(content[0:4], big_endian=big_endian)
+      if str_length == 0: return ""
+      return content[4:4+str_length].decode('utf-8')
     
-    if len(content) < 4:
-      raise TypeError(f"Bytes provided to String.unpack do not contain a valid 32-bit integer (hex={content.hex()})")
-    str_length = Number.unpack_uint(content[0:4], big_endian=big_endian)
-    if str_length == 0: return ""
-    return content[4:4+str_length].decode('utf-8')
+    str_length = Number.unpack_uint(content.read(4), big_endian=big_endian)
+    return content.read(str_length).decode('utf-8')
   
   @classmethod
   def parse_path(cls, path:str) -> tuple[str|None, str|None]:
@@ -753,9 +752,9 @@ class Boolean:
   
   @classmethod
   def unpack(cls, content:BinaryIO|bytes|bytearray) -> bool:
-    if isinstance(content, BinaryIO):
-      return content.read(1) == b'\x01'
-    return content > b'\x00'
+    if isinstance(content, (bytes,bytearray)):
+      return content > b'\x00'
+    return content.read(1) == b'\x01'
   
   @classmethod
   def pack(cls, val:bool) -> bytes:
