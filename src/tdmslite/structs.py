@@ -180,6 +180,93 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
+  def pack(self, content:TDMSPyObject, big_endian:bool) -> bytes:
+    """Pack a value from the provided TDMSDataType
+
+    Args:
+      stream (BinaryIO): The stream to read and advance
+      big_endian (bool): The endianness of any numbers
+
+    Raises:
+      NotImplementedError: Raised if an unsupported unit (DAQmxRawData) is attempted to be packed
+      TypeError: Raised if the type of content does not match the allowable types of the TDMSDataType
+
+    Returns:
+      bytes: The packed bytes object of the content
+    """
+    match self:
+      case TDMSDataTypes.tdsTypeString:
+        if isinstance(content, str):
+          return String.pack(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into string")
+      case TDMSDataTypes.tdsTypeBoolean:
+        if isinstance(content, bool):
+          return Boolean.pack(content)
+        raise TypeError(f"Cannot pack {type(content)} into bool")
+      case TDMSDataTypes.tdsTypeI8:
+        if isinstance(content, int):
+          return Number.pack_i8(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into i8")
+      case TDMSDataTypes.tdsTypeU8:
+        if isinstance(content, int):
+          return Number.pack_u8(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into u8")
+      case TDMSDataTypes.tdsTypeI16:
+        if isinstance(content, int):
+          return Number.pack_i16(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into i16")
+      case TDMSDataTypes.tdsTypeU16:
+        if isinstance(content, int):
+          return Number.pack_u16(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into u16")
+      case TDMSDataTypes.tdsTypeI32:
+        if isinstance(content, int):
+          return Number.pack_i32(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into i32")
+      case TDMSDataTypes.tdsTypeU32:
+        if isinstance(content, int):
+          return Number.pack_u32(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into u32")
+      case TDMSDataTypes.tdsTypeI64:
+        if isinstance(content, int):
+          return Number.pack_i64(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into i64")
+      case TDMSDataTypes.tdsTypeU64:
+        if isinstance(content, int):
+          return Number.pack_u64(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into u64")
+      case TDMSDataTypes.tdsTypeSingleFloat | \
+        TDMSDataTypes.tdsTypeSingleFloatWithUnit:
+        if isinstance(content, float):
+          return Number.pack_sfloat(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into single-precision float")
+      case TDMSDataTypes.tdsTypeComplexSingleFloat:
+        if isinstance(content, complex):
+          return Number.pack_csfloat(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into complex single-precision float")
+      case TDMSDataTypes.tdsTypeDoubleFloat | \
+        TDMSDataTypes.tdsTypeDoubleFloatWithUnit:
+        if isinstance(content, float):
+          return Number.pack_dfloat(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into double-precision float")
+      case TDMSDataTypes.tdsTypeComplexDoubleFloat:
+        if isinstance(content, complex):
+          return Number.pack_cdfloat(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into complex double-precision float")
+      case TDMSDataTypes.tdsTypeExtendedFloat | \
+        TDMSDataTypes.tdsTypeExtendedFloatWithUnit:
+        if isinstance(content, float):
+          return Number.pack_efloat(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into extended-precision float")
+      case TDMSDataTypes.tdsTypeTimeStamp:
+        if isinstance(content, datetime):
+          return Timestamp.pack(content, big_endian=big_endian)
+        raise TypeError(f"Cannot pack {type(content)} into timestamp")
+      case TDMSDataTypes.tdsTypeFixedPoint:
+        raise NotImplementedError("Fixed point values are not supported by NI in TDMS")
+      case _:
+        raise NotImplementedError(f"Type {self} has not yet been added")
+
 
 # Data container classes
 @dataclass
