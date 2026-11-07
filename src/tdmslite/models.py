@@ -121,6 +121,9 @@ class TDMSMetadata:
       # Create the object and add it to objects list
       self.objects.append(TDMSMetadataObject(object_path, raw_layout, properties))
 
+  def __repr__(self) -> str:
+    return f"TDMSMetadata({",".join([x.__repr__() for x in self.objects[0:1]])+(", ..." if len(self.objects) > 1 else "")})"
+
   def to_bytes(self, big_endian:bool=False) -> bytes:
     """Pack a TDMSMetadata's object to bytes"""
     result:bytes = Number.pack_u32(len(self.objects), big_endian=big_endian)
@@ -186,7 +189,7 @@ class TDMSChannel:
   
   def __repr__(self) -> str:
     return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")},"\
-      f" data_type={self.data_type}, data={"None" if len(self) == 0 else len(self)})")
+      f" data_type={self.data_type.name if self.data_type else "<void>"}, data={"None" if len(self) == 0 else len(self)})")
 
 class TDMSGroup:
   """Physical Group container class
@@ -284,19 +287,21 @@ class TDMSDocument:
     # Read each segment until EOF
     while True:
       seg_start = stream.tell()
-
+      logger.info(f"Ingesting segment at position {seg_start}")
+      
       # Delegate parsing
       segment = TDMSSegment(stream, channel_states, active_objects)
       if segment.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
         segment.lead_in.integrity == TDMSLeadInIntegrity.DONE:
         break
-
+      logger.info(f"Got metadata {segment.metadata}")
       active_objects = segment.objects
 
       # Update Document hierarchy
       for obj in segment.objects:
         group_name, chan_name = String.parse_path(obj.path)
-
+        obj_path = f"/'{group_name}'/'{chan_name}'/" if chan_name else f"/'{group_name}'/" if group_name else "/"
+        logger.info(f"Updating {obj_path}...")
         if group_name is None and chan_name is None:
           self.properties.update(obj.properties)
         elif group_name and not chan_name:
@@ -309,15 +314,17 @@ class TDMSDocument:
             group.channels[chan_name] = TDMSChannel(chan_name, obj.path, dtype)
 
           group.channels[chan_name].properties.update(obj.properties)
-
+        logger.info(f"Updated {obj_path} with {len(obj.properties)} properties")
       # Add segment's chunks
       for path, chunk in segment.raw_chunks.items():
         group_name, chan_name = String.parse_path(path)
         if group_name and chan_name:
           self.groups[group_name].channels[chan_name].add_data(chunk)
+          logger.info(f"Updated {path} with {len(chunk)} items")
 
       # EOF?
       if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
+        logger.info(f"Segment contains EOF")
         break
       stream.seek(seg_start + 28 + segment.lead_in.next_segment)
   
