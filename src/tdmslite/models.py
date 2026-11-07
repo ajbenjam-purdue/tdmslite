@@ -421,6 +421,7 @@ class TDMSDocument:
     raw_bytes = b""
     channel_objects:list[TDMSMetadataObject] = []
     for group in self.groups.values():
+      channel_objects.append(TDMSMetadataObject(f"/'{group.name}'", None, group.properties))
       for channel in group.channels.values():
         chan_bytes = b""
         n_vals = 0
@@ -434,7 +435,8 @@ class TDMSDocument:
           continue
         
         channel_objects.append(TDMSMetadataObject(
-          channel.path, TDMSRawDataLayout(channel.data_type, 1, n_vals, len(chan_bytes))))
+          channel.path, TDMSRawDataLayout(channel.data_type, 1, n_vals, len(chan_bytes)),
+          channel.properties))
         raw_bytes += chan_bytes
     
     meta_bytes = TDMSMetadata([root_object] + channel_objects).to_bytes(big_endian=big_endian)
