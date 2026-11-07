@@ -41,6 +41,12 @@ Raises ValueError if the value is not present.
 Supporting start and stop arguments is optional, but
 recommended.
 
+#### BooleanArray.pack
+```python
+BooleanArray.pack(self, big_endian: bool = False) -> bytes
+```
+no docs available
+
 #### BooleanArray.to_list
 ```python
 BooleanArray.to_list(self) -> list[Any]
@@ -86,6 +92,18 @@ Raises ValueError if the value is not present.
 
 Supporting start and stop arguments is optional, but
 recommended.
+
+#### ComplexArray.pack
+```python
+ComplexArray.pack(self, big_endian: bool = False) -> bytes
+```
+Packs a complexarray into bytes while respecting its datatype
+
+Args:
+  big_endian (bool, optional): The endianness of the operation. Defaults to False.
+
+Returns:
+  bytes: The resulting contiguous bytes containing all the values of the array
 
 #### ComplexArray.to_list
 ```python
@@ -133,6 +151,20 @@ Raises ValueError if the value is not present.
 Supporting start and stop arguments is optional, but
 recommended.
 
+#### ExtendedFloatArray.pack
+```python
+ExtendedFloatArray.pack(self, big_endian: bool = False) -> bytes
+```
+Packs an extended float array into bytes. Due to the lack of 
+support for any extended precision fp on python, this just captures
+a view of the internal raw bytes
+
+Args:
+  big_endian (bool, optional): The endianness of the operation. Defaults to False.
+
+Returns:
+  bytes: The resulting contiguous bytes object containing all the values of the array
+
 #### ExtendedFloatArray.to_list
 ```python
 ExtendedFloatArray.to_list(self) -> list[Any]
@@ -179,6 +211,12 @@ Raises ValueError if the value is not present.
 Supporting start and stop arguments is optional, but
 recommended.
 
+#### NumericArray.pack
+```python
+NumericArray.pack(self, big_endian: bool = False) -> bytes
+```
+no docs available
+
 #### NumericArray.to_list
 ```python
 NumericArray.to_list(self) -> list[Any]
@@ -219,6 +257,12 @@ Raises ValueError if the value is not present.
 Supporting start and stop arguments is optional, but
 recommended.
 
+#### StringArray.pack
+```python
+StringArray.pack(self, big_endian: bool = False) -> bytes
+```
+no docs available
+
 #### StringArray.to_list
 ```python
 StringArray.to_list(self) -> list[Any]
@@ -252,6 +296,12 @@ Raises ValueError if the value is not present.
 
 Supporting start and stop arguments is optional, but
 recommended.
+
+#### TDMSArray.pack
+```python
+TDMSArray.pack(self, big_endian: bool = False) -> bytes
+```
+no docs available
 
 #### TDMSArray.to_list
 ```python
@@ -298,12 +348,31 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### TDMSDocument.__init__
 ```python
-TDMSDocument.__init__(self, stream: <class BinaryIO>) -> None
+TDMSDocument.__init__(self) -> None
 ```
-Create an in-place TDMSDocument from a BinaryIO stream
+Create an empty in-place TDMSDocument
+    
 
-Args:
-    stream (BinaryIO): The readable buffer to create the TDMSDocument from
+#### TDMSDocument.to_bytes
+```python
+TDMSDocument.to_bytes(self, big_endian: bool = False) -> bytes
+```
+Packs a document into a single bytes object. 
+
+Returns:
+    bytes: The resulting bytes, including the lead-in, metadata, and raw data if applicable. 
+
+#### TDMSDocument.to_csv
+```python
+TDMSDocument.to_csv(self, destination: pathlib._local.Path | str, exist_ok: bool = False) -> None
+```
+no docs available
+
+#### TDMSDocument.to_file
+```python
+TDMSDocument.to_file(self, destination: pathlib._local.Path | str, exist_ok: bool = False) -> None
+```
+no docs available
 
 ---
 ### `class TDMSGroup`
@@ -314,6 +383,54 @@ Args:
 #### TDMSGroup.__init__
 ```python
 TDMSGroup.__init__(self, name: str) -> None
+```
+Initialize self.  See help(type(self)) for accurate signature.
+
+---
+### `class TDMSLeadIn`
+
+> Lead-in container class. References NI's documentation: "TDMS File Format Internal Structure"
+>   
+
+#### TDMSLeadIn.__init__
+```python
+TDMSLeadIn.__init__(self) -> None
+```
+Create an in-place empty TDMSLeadIn container
+    
+
+#### TDMSLeadIn.to_bytes
+```python
+TDMSLeadIn.to_bytes(self) -> bytes
+```
+no docs available
+
+---
+### `class TDMSMetadata`
+
+> Metadata creation and container class. References NI's documentation: "TDMS File Format Internal Structure"
+>   
+
+#### TDMSMetadata.__init__
+```python
+TDMSMetadata.__init__(self, objects: list[tdmslite.structs.TDMSMetadataObject] = []) -> None
+```
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### TDMSMetadata.to_bytes
+```python
+TDMSMetadata.to_bytes(self, big_endian: bool = False) -> bytes
+```
+Pack a TDMSMetadata's object to bytes
+
+---
+### `class TDMSMetadataObject`
+
+> TDMSMetadataObject(path: 'str', raw_layout: 'TDMSRawDataLayout | None' = None, properties: 'dict[str, TDMSPyObject]' = <factory>)
+
+#### TDMSMetadataObject.__init__
+```python
+TDMSMetadataObject.__init__(self, path: str, raw_layout: TDMSRawDataLayout | None = None, properties: dict[str, TDMSPyObject] = <factory>) -> None
 ```
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -368,6 +485,12 @@ Raises ValueError if the value is not present.
 
 Supporting start and stop arguments is optional, but
 recommended.
+
+#### TimestampArray.pack
+```python
+TimestampArray.pack(self, big_endian: bool = False) -> bytes
+```
+no docs available
 
 #### TimestampArray.to_list
 ```python

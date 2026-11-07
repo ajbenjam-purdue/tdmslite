@@ -5,10 +5,46 @@ _tdmslite follows date-based versioning. A version code reflects its correspondi
 
 |Version|
 |:-|
+|[2026.11.7](#2026117)  |
 |[2026.11.1](#2026111)  |
 |[2026.10.31](#20261031)|
 
 ## Patch notes
+
+### 2026.11.7
+
+#### Added
+- TDMS Write Support & Document Serialization:
+  - `TDMSDocument.to_bytes()`: Serializes in-memory documents, groups, channels, properties, and channel data into a compliant TDMS 2.0 binary payload
+  - `TDMSDocument.to_file()`: Convenience method to write a document directly to disk
+  - Default `TDMSDocument()` constructor
+  - `TDMSLeadIn.to_bytes()`: Generates 28-byte lead-in headers w/ TOC flags
+  - `TDMSMetadata.to_bytes()`: Packs object catalogs, properties, and raw data layout indices
+  - Array serialization: Implemented `.pack(big_endian=False)` across all `TDMSArray` subclasses:
+    - `NumericArray`: standard integer and float arrays
+    - `StringArray`: encodes raw channel strings into contiguous UTF-8 payloads with 4-byte offset tables
+    - `ComplexArray`: interleaved complex single- and double-precision float arrays
+    - `ExtendedFloatArray`: 10-bye extended-precision float arrays
+    - `TimestampArray`: 16-byte NI timestamp (`datetime.datetime`) arrays
+    - `BooleanArray`: 1-byte boolean arrays
+- Low-Level Binary Struct Utilities:
+  - `Number`: Added comprehensive packers for all NI integer types (`pack_i8`, `pack_u8`, `pack_i16`, `pack_u16`, `pack_i32`, `pack_u32`, `pack_i64`, `pack_u64`), floating-point types (`pack_hfloat`, `pack_sfloat`, `pack_dfloat`), complex floats (`pack_csfloat`, `pack_cdfloat`), and generic integer bounds auto-packers (`pack_generic_int`, `pack_generic_uint`)
+  - `Number.pack_efloat()`: IEEE 754 double precision to 80-bit x87 extended precision encoder
+  - `Boolean.pack()`: 1-byte boolean packer
+  - `Timestamp.pack()`: Converts Python `datetime.datetime` objects into NI timestamps
+  - `TDMSDataTypes.pack()` & `TDMS_pack()`: Generic polymorphic value-packing for metadata properties and external API
+  - `TDMSDataTypes.n_bytes`: Property exposing the byte width of fixed-length data types
+  - Added `TDMSConvertable` protocol allowing custom user classes with a `get_TDMSPyObject()` method to be serialized as metadata
+
+#### Changed
+- Constructor & Architecture Decoupling:
+  - Split streaming ingestion from default instantiation for `TDMSLeadIn` and `TDMSMetadata` via dedicated `from_stream()` class methods
+  - Changed `String.unpack()` and `Boolean.unpack()` to accept either binary streams (`BinaryIO` / `io.IOBase`) or raw byte buffers (`bytes | bytearray`) (I previously forgot to do this)
+  - Exposed `TDMSLeadIn` and `TDMSMetadata` in package namespace (This may be reverted)
+
+#### Fixed
+- Multi-Chunk Segment Ingestion:
+  - Fixed `TDMSSegment._read_raw_data()` terminating after reading only the first chunk of a segment. It now computes total segment raw bytes (`next_segment - raw_data_offset`) and reads repeating chunks from a segment
 
 ### 2026.11.1
 

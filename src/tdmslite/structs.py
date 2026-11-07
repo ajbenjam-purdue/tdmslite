@@ -849,6 +849,14 @@ class Number:
         yield complex(self._raw[i], self._raw[i+1])
 
     def pack(self, big_endian:bool=False) -> bytes:
+      """Packs a complexarray into bytes while respecting its datatype
+
+      Args:
+        big_endian (bool, optional): The endianness of the operation. Defaults to False.
+
+      Returns:
+        bytes: The resulting contiguous bytes containing all the values of the array
+      """
       result = b""
       packing_method = self.data_type.pack
       for num_bytes in [packing_method(x, big_endian=big_endian) for x in self._raw]:
@@ -894,6 +902,16 @@ class Number:
         yield Number.unpack_efloat(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
 
     def pack(self, big_endian:bool=False) -> bytes:
+      """Packs an extended float array into bytes. Due to the lack of 
+      support for any extended precision fp on python, this just captures
+      a view of the internal raw bytes
+
+      Args:
+        big_endian (bool, optional): The endianness of the operation. Defaults to False.
+
+      Returns:
+        bytes: The resulting contiguous bytes object containing all the values of the array
+      """
       return bytes(self._raw) if big_endian == self.big_endian else \
         b"".join(self._raw[i:i+self.ITEM_SIZE_BYTES][::-1] \
         for i in range(0, len(self._raw), self.ITEM_SIZE_BYTES))
@@ -918,6 +936,14 @@ class Boolean:
   
   @classmethod
   def pack(cls, val:bool) -> bytes:
+    """Packs the contents of the array into a bytes object
+
+    Args:
+      val (bool): The value to pack
+
+    Returns:
+      bytes: the contiguous bytes object containing all the values of the array
+    """
     return struct.pack('?', val)
   
   class BooleanArray(TDMSArray):
