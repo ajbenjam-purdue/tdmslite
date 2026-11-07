@@ -188,6 +188,9 @@ class TDMSRawDataLayout:
   dim:        int
   n_vals:     int
   total_bytes:int
+  
+  def __repr__(self) -> str:
+    return f"TDMSRawDataLayout(type={self.data_type.name}, dim={self.dim}, n_vals={self.n_vals})"
 
 @dataclass
 class TDMSMetadataObject:
