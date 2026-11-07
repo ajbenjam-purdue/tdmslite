@@ -56,7 +56,15 @@ class TDMSLeadIn:
     if self.next_segment == 4294967295:
       logger.warning("Likely corrupted data in segment")
       self.integrity |= TDMSLeadInIntegrity.WARN
-    
+  
+  def to_bytes(self) -> bytes:
+    flags_int = TOCFlag.pack(self.members)
+    return (
+      b'TDSm' + Number.pack_u32(flags_int, big_endian=self.big_endian)
+      + Number.pack_u32(self.version.value, big_endian=self.big_endian)
+      + Number.pack_u64(self.next_segment, big_endian=self.big_endian)
+      + Number.pack_u64(self.raw_data_offset, big_endian=self.big_endian))
+  
 class TDMSMetadata:
   """Metadata creation and container class. References NI's documentation: "TDMS File Format Internal Structure"
   """
