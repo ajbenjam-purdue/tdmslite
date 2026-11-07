@@ -12,14 +12,25 @@ class TDMSLeadIn:
   """Lead-in container class. References NI's documentation: "TDMS File Format Internal Structure"
   """
   
-  def __init__(self, stream:BinaryIO) -> None:
-      
+  def __init__(self) -> None:
+    """Create an in-place empty TDMSLeadIn container
+    """
+    
     # Set defaults
     self.integrity:TDMSLeadInIntegrity = TDMSLeadInIntegrity.OK
-    self.big_endian:bool = False
-    self.version:TOCVersion = TOCVersion.UNKNOWN
-    self.next_segment:int = 0
-    self.raw_data_offset:int = 0
+    self.big_endian:bool        = False
+    self.version:TOCVersion     = TOCVersion.UNKNOWN
+    self.next_segment:int       = 0
+    self.raw_data_offset:int    = 0
+    self.members:list[TOCFlag]  = []
+    self.interleaved:bool       = False
+    self.has_metadata:bool      = False
+    self.has_rawdata:bool       = False
+  
+  @classmethod
+  def from_stream(cls, stream:BinaryIO) -> 'TDMSLeadIn':
+    
+    lead_in = TDMSLeadIn()
     
     # Check header
     initial_position:int = stream.tell()
@@ -27,35 +38,40 @@ class TDMSLeadIn:
     
     if magic_sequence == b'':
       stream.seek(initial_position)
-      self.integrity = TDMSLeadInIntegrity.DONE
-      return
+      logger.info("Segment contains EOF")
+      lead_in.integrity = TDMSLeadInIntegrity.DONE
+      return lead_in
     if magic_sequence != b'TDSm':
       stream.seek(initial_position)
-      self.integrity = TDMSLeadInIntegrity.ERROR
+      lead_in.integrity = TDMSLeadInIntegrity.ERROR
       logger.error(f"Invalid magic sequence (Lead-in started with {magic_sequence})")
-      return
+      return lead_in
     
+    stream.seek(initial_position)
+    logger.info(f"Ingesting lead in starting with bytes:\n > {stream.read(20).hex()}...s")
+    stream.seek(initial_position + 4)
     # Load data
-    members:list[TOCFlag] = TOCFlag.members(stream.read(4))
-    self.big_endian = TOCFlag.kTocBigEndian in members
-    self.interleaved = TOCFlag.kTocInterleavedData in members
-    self.has_metadata = TOCFlag.kTocMetaData in members
-    self.has_rawdata = TOCFlag.kTocRawData in members
-    self.version = TOCVersion(Number.unpack_uint(stream.read(4), self.big_endian))
-    self.next_segment = Number.unpack_uint(stream.read(8), self.big_endian)
-    self.raw_data_offset = Number.unpack_uint(stream.read(8), self.big_endian)
-    # Not sure on kTocNewObjList or kTocDAQmxRawData
+    lead_in.members         = TOCFlag.members(stream.read(4))
+    lead_in.big_endian      = TOCFlag.kTocBigEndian in lead_in.members
+    lead_in.interleaved     = TOCFlag.kTocInterleavedData in lead_in.members
+    lead_in.has_metadata    = TOCFlag.kTocMetaData in lead_in.members
+    lead_in.has_rawdata     = TOCFlag.kTocRawData in lead_in.members
+    lead_in.version         = TOCVersion(Number.unpack_uint(stream.read(4), lead_in.big_endian))
+    lead_in.next_segment    = Number.unpack_uint(stream.read(8), lead_in.big_endian)
+    lead_in.raw_data_offset = Number.unpack_uint(stream.read(8), lead_in.big_endian)
     
     # Data checks
-    if self.version == TOCVersion.UNKNOWN:
+    if lead_in.version == TOCVersion.UNKNOWN:
       logger.error("Unknown segment version")
-      self.integrity |= TDMSLeadInIntegrity.ERROR # This redundant af
-    elif self.version != TOCVersion.TDMS_2:
-      logger.warning(f"Loading old TDMS data ({self.version.name})")
-      self.integrity |= TDMSLeadInIntegrity.WARN
-    if self.next_segment == 4294967295:
+      lead_in.integrity |= TDMSLeadInIntegrity.ERROR # This redundant af
+    elif lead_in.version != TOCVersion.TDMS_2:
+      logger.warning(f"Loading old TDMS data ({lead_in.version.name})")
+      lead_in.integrity |= TDMSLeadInIntegrity.WARN
+    if lead_in.next_segment == 4294967295:
       logger.warning("Likely corrupted data in segment")
-      self.integrity |= TDMSLeadInIntegrity.WARN
+      lead_in.integrity |= TDMSLeadInIntegrity.WARN
+    
+    return lead_in
   
   def to_bytes(self) -> bytes:
     flags_int = TOCFlag.pack(self.members)
@@ -223,7 +239,7 @@ class TDMSSegment:
     self.start_pos = stream.tell()
 
     # Lead-in
-    self.lead_in = TDMSLeadIn(self.stream)
+    self.lead_in = TDMSLeadIn.from_stream(self.stream)
     if self.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
      self.lead_in.integrity == TDMSLeadInIntegrity.DONE : return
 
