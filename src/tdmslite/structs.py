@@ -30,6 +30,7 @@ class TDMSConvertable(Protocol):
   def get_TDMSPyObject(self) -> TDMSPyObject:
     ...
 
+
 # Enum classes
 class TOCFlag(Enum):
   """An enum to contain table of contents values by integer (U32) lookup. 
@@ -298,6 +299,7 @@ class TDMSDataTypes(IntEnum):
       case TDMSDataTypes.tdsTypeComplexDoubleFloat:    return 16
       case TDMSDataTypes.tdsTypeDAQmxRawData:          return -1
 
+
 # Data container classes
 @dataclass
 class TDMSRawDataLayout:
@@ -415,6 +417,7 @@ class TDMSArray(Sequence[Any], ABC):
         return (total_bytes, arr)
 
     raise NotImplementedError(f"Unsupported data type: {data_type}")
+
 
 # Helper classes
 class String:
@@ -840,12 +843,9 @@ class Number:
         raise IndexError(f"Index {index} out of bounds for length {len(self)}")
       return complex(self._raw[2 * index], self._raw[2 * index + 1])
 
-    # TODO: Fix
-    # def __iter__(self) -> Iterator[complex]:
-    #   unpacking_method = self.data_type.unpack
-    #   data_size = self.data_type.n_bytes
-    #   for i in range(0, len(self._raw), data_size):
-    #     yield unpacking_method(self._raw[i:i+data_size], big_endian=False)
+    def __iter__(self) -> Iterator[complex]:
+      for i in range(0, len(self), 2):
+        yield complex(self._raw[i], self._raw[i+1])
 
     def pack(self, big_endian:bool=False) -> bytes:
       result = b""
@@ -889,7 +889,7 @@ class Number:
         big_endian=self.big_endian)
 
     def __iter__(self) -> Iterator[float]:
-      for i in range(len(self._raw)):
+      for i in range(0, len(self._raw), self.ITEM_SIZE_BYTES):
         yield Number.unpack_efloat(self._raw[i:i+self.ITEM_SIZE_BYTES], big_endian=self.big_endian)
 
     def pack(self, big_endian:bool=False) -> bytes:
@@ -1022,14 +1022,21 @@ class Timestamp:
       return Timestamp.unpack(self._raw[offset:offset + self.ITEM_SIZE_BYTES],
         big_endian=self.big_endian)
 
-    # def __iter__(self) -> Iterator[complex]:
-    #   return iter(self._raw) # TODO: Fix
+    def __iter__(self) -> Iterator[datetime]:
+      for i in range(0, len(self._raw), self.ITEM_SIZE_BYTES):
+        yield Timestamp.unpack(self._raw[i:i+10], big_endian=self.big_endian)
 
     def pack(self, big_endian:bool=False) -> bytes:
       return bytes(self._raw)
     
     
 # Generic packer
+@overload
+def TDMS_pack(obj:TDMSPyObject, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
+  ...
+@overload
+def TDMS_pack(obj:TDMSConvertable, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
+  ...
 def TDMS_pack(obj:TDMSPyObject|TDMSConvertable, big_endian:bool=False) -> tuple[bytes, TDMSDataTypes]:
   """Pack a vanilla python object or a convertable class (has a get_TDMSPyObject method) into bytes
 
