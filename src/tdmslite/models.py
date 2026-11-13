@@ -1,10 +1,11 @@
-from typing import BinaryIO, Any, Generator
-from pathlib import Path
 from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   TDMSPyObject, TDMSArray, TDMS_pack
+from typing import BinaryIO, Any, Generator
+import tkinter, tkinter.filedialog
 from logging import getLogger
+from pathlib import Path
 
 logger = getLogger(__name__)
 
@@ -317,7 +318,7 @@ class TDMSDocument:
     self.groups: dict[str, TDMSGroup] = {}
   
   @classmethod
-  def from_file(cls, path:str|Path) -> 'TDMSDocument':
+  def from_file(cls, path:str|Path|None=None) -> 'TDMSDocument':
     """Load a TDMS document into memory from the provided path.
 
     Args:
@@ -331,6 +332,15 @@ class TDMSDocument:
       FileNotFoundError: Raised if the file does not exist
       RuntimeError: Raised if the TDMSDocument object encounters an error while loading
     """
+    
+    if not path:
+      path = tkinter.filedialog.askopenfilename(
+        defaultextension=".tdms",
+        filetypes=[("TDMS File", ".tdms")],
+        title="Select the TDMS file to load"
+      )
+      if path == "":
+        raise FileNotFoundError("No file specified")
     
     path = Path(path).resolve()
     if path.suffix.lower() != '.tdms':
@@ -470,7 +480,20 @@ class TDMSDocument:
     
     return lead_in.to_bytes() + meta_bytes + raw_bytes
   
-  def to_file(self, destination:Path|str, exist_ok:bool=False) -> None:
+  def to_file(self, destination:Path|str|None=None, exist_ok:bool=False) -> None:
+    
+    if not destination:
+      
+      destination = tkinter.filedialog.asksaveasfilename(
+        defaultextension=".tdms",
+        filetypes=[("TDMS File", ".tdms")],
+        title="Select the TDMS file to load"
+      )
+      
+      if destination == "":
+        destination = Path("./temp.tdms").resolve()
+        logger.error(f"No destination provided to TDMSDocument.to_file(). Defaulting to {destination}.")
+        
     destination = Path(destination).resolve().with_suffix(".tdms")
     if not exist_ok and destination.exists():
       raise FileExistsError(f"File at {destination} already exists. "
@@ -480,7 +503,6 @@ class TDMSDocument:
     with open(destination, 'wb') as file:
       logger.info(f"Wrote {_bytes(file.write(self.to_bytes()))} bytes to {destination}") # This may need reworked for large files
     
-  
   def to_csv(self, destination:Path|str, exist_ok:bool=False) -> None:
     destination = Path(destination).resolve().with_suffix(".csv")
     if not exist_ok and destination.exists():
