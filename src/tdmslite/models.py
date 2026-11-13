@@ -2,7 +2,7 @@ from .structs import TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   TDMSPyObject, TDMSArray, TDMS_pack
-from typing import BinaryIO, Any, Generator
+from typing import BinaryIO, Any, Generator, Literal
 import tkinter, tkinter.filedialog
 from logging import getLogger
 from pathlib import Path
@@ -511,3 +511,32 @@ class TDMSDocument:
                             " parameter to allow for overwriting.")
     raise NotImplementedError(f"Can't save TDMSDocument to .csv yet")
     # TODO: Complete
+
+class TDMSWriter:
+  def __init__(self, path:str|Path, mode:Literal['w', 'a']='w') -> None:
+    """_summary_
+
+    Args:
+      path (str | Path): _description_
+      mode (Literal[&#39;w&#39;, &#39;a&#39;], optional): The mode to follow when writing. Defaults to 'w'.
+    
+    `mode` options:
+      'w': _Write to a new TDMS file_
+      'a': _Append to an existing TDMS file_
+    """
+    self.path = Path(path)
+    self.mode = mode
+    self._stream: BinaryIO | None = None
+    self._initialized: bool = False
+    
+    # group name, channel name, data type
+    self._channels: list[tuple[str, str, TDMSDataTypes]] = []
+  
+  def add_channel(self, group:str, channel:str, data_type:TDMSDataTypes) -> None:
+    
+    if self._initialized:
+      logger.error(f"Cannot register channel \"{channel}\" under group \"{group}\" (writer already initialized)")
+      return
+    
+    self._channels.append((group, channel, data_type))
+    
