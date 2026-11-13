@@ -539,4 +539,18 @@ class TDMSWriter:
       return
     
     self._channels.append((group, channel, data_type))
-    
+  
+  def __enter__(self) -> 'TDMSWriter':
+    open_mode = "wb+" if self.mode == "w" else "ab+"
+    self._stream = open(self.path, open_mode)
+    if self.mode == "a" and self.path.stat().st_size > 0:
+      self._initialized = True
+    return self
+
+  def __exit__(self, *_) -> None:
+    self.close()
+  
+  def close(self) -> None:
+    if self._stream and not self._stream.closed:
+      self._stream.flush()
+      self._stream.close()
