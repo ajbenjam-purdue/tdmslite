@@ -2,7 +2,7 @@ from .structs import TDMSConvertable, TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   TDMSPyObject, TDMSArray, TDMS_pack
-from typing import BinaryIO, Any, Generator, Literal
+from typing import BinaryIO, Any, Generator, Iterable, Literal
 import tkinter, tkinter.filedialog
 from logging import getLogger
 from pathlib import Path
@@ -39,6 +39,17 @@ class TDMSLeadIn:
     self.interleaved:bool       = False
     self.has_metadata:bool      = False
     self.has_rawdata:bool       = False
+  
+  @classmethod
+  def from_flags(cls, flag_or_flags:TOCFlag|Iterable[TOCFlag], next_segment:int, raw_data_offset:int) -> 'TDMSLeadIn':
+    
+    lead_in = TDMSLeadIn()
+    lead_in.members = list(flag_or_flags) if isinstance(flag_or_flags, Iterable) else [flag_or_flags]
+    lead_in.version = TOCVersion.TDMS_2
+    lead_in.next_segment = next_segment
+    lead_in.raw_data_offset = raw_data_offset
+    
+    return lead_in
   
   @classmethod
   def from_stream(cls, stream:BinaryIO) -> 'TDMSLeadIn':
@@ -593,11 +604,9 @@ class TDMSWriter:
       meta_bytes.extend(Number.pack_u32(0)) # 0 properties
 
     # lead-in
-    lead_in = TDMSLeadIn()
-    lead_in.members = [TOCFlag.kTocMetaData, TOCFlag.kTocNewObjList]
-    lead_in.version = TOCVersion.TDMS_2
-    lead_in.next_segment = len(meta_bytes)
-    lead_in.raw_data_offset = len(meta_bytes)
+    lead_in = TDMSLeadIn.from_flags(
+      [TOCFlag.kTocMetaData, TOCFlag.kTocNewObjList], 
+      len(meta_bytes), len(meta_bytes))
     self._stream.write(lead_in.to_bytes())
     self._stream.write(meta_bytes)
     self._stream.flush()
@@ -626,11 +635,8 @@ class TDMSWriter:
       return
     
     # lead-in
-    lead_in = TDMSLeadIn()
-    lead_in.members = [TOCFlag.kTocRawData]
-    lead_in.version = TOCVersion.TDMS_2
-    lead_in.next_segment = len(payload)
-    lead_in.raw_data_offset = 0
+    lead_in = TDMSLeadIn.from_flags(
+      TOCFlag.kTocRawData, len(payload), 0)
     self._stream.write(lead_in.to_bytes())
     self._stream.write(payload)
     self._stream.flush()
