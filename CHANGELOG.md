@@ -5,11 +5,38 @@ _tdmslite follows date-based versioning. A version code reflects its correspondi
 
 |Version|
 |:-|
+|[2026.11.15](#20261115)|
 |[2026.11.7](#2026117)  |
 |[2026.11.1](#2026111)  |
 |[2026.10.31](#20261031)|
 
 ## Patch notes
+
+### 2026.11.15
+
+#### Added
+- Streaming (`TDMSWriter`):
+  - Added `TDMSWriter(path, mode='w'|'a')` with context manager support for streaming
+  - `add_channel(group, channel, data_type)` and `add_channels(iterable)` methods to register channels to a document
+  - `write_initial_segment()` and `write_chunk()` methods to write an initial segment and a chunk of data
+- Safe Data & Model Accessors:
+  - Added `EmptyTDMSArray(TDMSArray)` to safely represent a void array (`data_type = tdsTypeVoid`, `len == 0`, `pack() == b""`)
+  - Added safe `get()` methods: `TDMSDocument.get(group_name)` and `TDMSGroup.get(channel_name)` returning `None` for a missing key
+  - Integrated optional file selection GUI dialogs (`tkinter.filedialog`) into `TDMSDocument.from_file()` and `to_file()` when `path` is omitted
+- Struct & Serialization Utilities:
+  - `TDMSDataTypes.bytes()`: returns a 4-byte unsigned integer of the type itself
+  - `String.to_path(group, channel)`: Path builder with single-quote escape handling
+  - `TDMSLeadIn.from_flags()`: Constructor w/ lead-in headers directly from flag lists and byte offsets
+
+#### Changed
+- `TDMSWriter._channels`: Updated internal channel tracking from a static list to a sample-count map (`dict[tuple[str, str, TDMSDataTypes], int]`) to enable stateful sample-count diffing across streaming chunks
+- `TDMSWriter.write_initial_segment()`: Updated signature to accept direct channel declarations (`channels=...`) alongside file properties
+- Updated `__getitem__` on `TDMSDocument` and `TDMSGroup` to raise `KeyError` for a missing key
+- `NumericArray`: Added support for initialization directly from any `Iterable[float | int]` in addition to `array.array`
+
+#### Fixed
+- Raw data infinite loop:
+  - Added infinite loop protection in `TDMSSegment._read_raw_data()` in case data is malformed and the expected length is wrong
 
 ### 2026.11.7
 
