@@ -603,3 +603,34 @@ class TDMSWriter:
     self._stream.flush()
 
     self._initialized = True
+    
+  def write_chunk(self, data:dict[str, TDMSArray]) -> None:
+
+    # Check for tomfoolery
+    if not self._stream:
+      raise Exception("Stream has not been initialized, call TDMSWriter.write_initial_segment first")
+    if not self._initialized:
+      logger.warning("Writer not initialized, writing a generic first segment")
+      self.write_initial_segment()
+    
+    # Build payload
+    payload = bytearray()
+    for group_name, channel_name, _ in self._channels:
+      channel_path = String.to_path(group_name, channel_name)
+      array = data.get(channel_path)
+      if not array: continue
+      payload.extend(array.pack())
+    
+    if len(payload) == 0:
+      logger.warning("Tried to write a zero-entry chunk")
+      return
+    
+    # lead-in
+    lead_in = TDMSLeadIn()
+    lead_in.members = [TOCFlag.kTocRawData]
+    lead_in.version = TOCVersion.TDMS_2
+    lead_in.next_segment = len(payload)
+    lead_in.raw_data_offset = 0
+    self._stream.write(lead_in.to_bytes())
+    self._stream.write(payload)
+    self._stream.flush()
