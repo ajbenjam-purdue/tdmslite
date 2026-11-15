@@ -295,6 +295,8 @@ class TDMSSegment:
     total_segment_bytes = self.lead_in.next_segment - self.lead_in.raw_data_offset
     
     while total_read_bytes < total_segment_bytes:
+      initial_bytes_read:int = total_read_bytes
+      
       # For each object, create the corresponding array
       for obj in self.objects:
         
@@ -313,6 +315,10 @@ class TDMSSegment:
         else:
           self.raw_chunks[obj.path].extend(chunk)
         total_read_bytes += bytes_read
+      
+      if initial_bytes_read == total_read_bytes:
+        logger.error("Malformed raw data, reader made no progress")
+        break
       
     return total_read_bytes
 
