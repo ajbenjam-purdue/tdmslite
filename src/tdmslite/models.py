@@ -1,7 +1,7 @@
 from .structs import TDMSConvertable, TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
-  TDMSPyObject, TDMSArray, TDMS_pack
+  EmptyTDMSArray, TDMSPyObject, TDMSArray, TDMS_pack
 from typing import BinaryIO, Any, Generator, Iterable, Literal
 import tkinter, tkinter.filedialog
 from logging import getLogger
@@ -212,26 +212,32 @@ class TDMSChannel:
     self.path = path
     self.data_type = data_type
     self.properties:dict[str,TDMSPyObject] = {}
-    self.data:TDMSArray|None = None
+    self._data:TDMSArray|None = None
+  
+  @property
+  def data(self) -> TDMSArray:
+    if not self._data:
+      return EmptyTDMSArray()
+    return self._data
   
   def add_data(self, chunk:TDMSArray) -> None:
     
     # If no data exists, set the data
-    if self.data:
-      self.data.extend(chunk)
-    else: self.data = chunk
+    if self._data:
+      self._data.extend(chunk)
+    else: self._data = chunk
   
   def __len__(self) -> int:
     return len(self.data) if self.data else 0
   
   def __getitem__(self, key:int|slice) -> Any:
-    if self.data:
-      return self.data[key]
+    if self._data:
+      return self._data[key]
     raise IndexError(f"Channel {self.name} ({self.path}) has no data")
   
   def __iter__(self) -> Generator[Any]:
-    if self.data:
-      yield from self.data
+    if self._data:
+      yield from self._data
   
   def __repr__(self) -> str:
     return (f"Channel(name={self.name.replace("\n", "\\n")}, path={self.path.replace("\n", "\\n")},"\
@@ -246,8 +252,16 @@ class TDMSGroup:
     self.properties: dict[str,TDMSPyObject] = {}
     self.channels: dict[str, TDMSChannel] = {}
 
+  def get(self, channel_name:str) -> TDMSChannel | None:
+    try:
+      return self[channel_name]
+    except:
+      return None
+
   def __getitem__(self, channel_name: str) -> TDMSChannel:
-    return self.channels[channel_name]
+    if channel_name in self.channels:
+      return self.channels[channel_name]
+    raise KeyError(f"Channel \"{channel_name}\" not in group \"{self.name}\"")
 
   def __iter__(self) -> Generator[TDMSChannel]:
     for channel in self.channels.values():
@@ -419,18 +433,16 @@ class TDMSDocument:
       raise RuntimeError(f"Encountered exception while loading TMDS file: {e}")
     return file
 
-  def __getitem__(self, key:str) -> TDMSGroup | None:
-    """Return the group whose name is the provided key or None if a match is not found
+  def get(self, group_name:str) -> TDMSGroup | None:
+    try:
+      return self[group_name]
+    except:
+      return None
 
-    Args:
-      key (str): The key to search the TDMSDocument for
-
-    Returns:
-      TDMSGroup | None: The resulting TDMSGroup or None if no matching group is found
-    """
-    if key in self.groups:
-      return self.groups[key]
-    return None
+  def __getitem__(self, group_name:str) -> TDMSGroup:
+    if group_name in self.groups:
+      return self.groups[group_name]
+    raise KeyError(f"Group \"{group_name}\" not in TDMSDocument")
 
   def __iter__(self) -> Generator[TDMSGroup]:
     """Create a generator object to yield one TDMSGroup at a time from the TDMSDocument's available groups
