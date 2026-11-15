@@ -482,6 +482,14 @@ class String:
     
     return (parts[0] if len(parts) > 0 else None, parts[1] if len(parts) > 1 else None)      
 
+  @classmethod
+  def to_path(cls, group:str|None, channel:str|None) -> str:
+    if group and channel:
+      return f"/'{group.replace("'", "''")}'/'{channel.replace("'", "''")}'"
+    if group:
+      return f"/'{group.replace("'", "''")}'"
+    return f"/"
+
   class StringArray(TDMSArray):
     """String array container providing interface to Python strings
     """
