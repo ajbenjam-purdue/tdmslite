@@ -581,11 +581,13 @@ class TDMSWriter:
       self._stream.flush()
       self._stream.close()
   
-  def write_initial_segment(self, file_properties:dict[str, TDMSPyObject|TDMSConvertable]={}) -> None:
+  def write_initial_segment(self, file_properties:dict[str, TDMSPyObject|TDMSConvertable]={}, 
+    channels:Iterable[tuple[str, str, TDMSDataTypes]]=[]) -> None:
     """Writes Segment 1 containing all metadata and channel definitions without actual data"""
     assert self._stream is not None
 
     meta_bytes = bytearray()
+    self.add_channels(channels)
 
     # Root, unique groups, channels
     groups = list(dict.fromkeys(g for g, _, _ in self._channels))
