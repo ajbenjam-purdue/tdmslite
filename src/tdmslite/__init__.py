@@ -1,6 +1,7 @@
 from .models import TDMSSegment, \
   TDMSDocument, TDMSGroup, TDMSChannel, \
-  TDMSLeadIn, TDMSMetadata, TDMSMetadataObject
+  TDMSLeadIn, TDMSMetadata, TDMSMetadataObject, \
+  TDMSWriter
 
 from .structs import TDMSDataTypes, TDMSArray, \
   NumericArray, ComplexArray, ExtendedFloatArray, \
@@ -13,4 +14,4 @@ __all__ = ["TDMSSegment", "TDMSDocument",
            "TimestampArray", "BooleanArray",
            "ExtendedFloatArray", "StringArray",
            "TDMSLeadIn", "TDMSMetadata", 
-           "TDMSMetadataObject"]
+           "TDMSMetadataObject", "TDMSWriter"]
