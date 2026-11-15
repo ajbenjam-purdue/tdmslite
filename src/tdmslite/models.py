@@ -531,10 +531,10 @@ class TDMSDocument:
 
 class TDMSWriter:
   def __init__(self, path:str|Path, mode:Literal['w', 'a']='w') -> None:
-    """_summary_
-
+    """
+    
     Args:
-      path (str | Path): _description_
+      path (str | Path): The path to save the file to, if writing to a file
       mode (Literal[&#39;w&#39;, &#39;a&#39;], optional): The mode to follow when writing. Defaults to 'w'.
     
     `mode` options:
@@ -546,8 +546,8 @@ class TDMSWriter:
     self._stream: BinaryIO | None = None
     self._initialized: bool = False
     
-    # group name, channel name, data type
-    self._channels: list[tuple[str, str, TDMSDataTypes]] = []
+    # group name, channel name, data type : # samples
+    self._channels: dict[tuple[str, str, TDMSDataTypes], int] = {}
   
   def add_channel(self, group:str, channel:str, data_type:TDMSDataTypes) -> None:
     
@@ -555,7 +555,16 @@ class TDMSWriter:
       logger.error(f"Cannot register channel \"{channel}\" under group \"{group}\" (writer already initialized)")
       return
     
-    self._channels.append((group, channel, data_type))
+    self._channels[(group, channel, data_type)] = 0
+  
+  def add_channels(self, channels:Iterable[tuple[str, str, TDMSDataTypes]]) -> None:
+    
+    if self._initialized:
+      logger.error(f"Cannot register channels: {", ".join(f"/\"{chan[0]}\"/\"{chan[1]}\"" for chan in channels)} (writer already initialized)")
+      return # This might not be necessary...
+    
+    for channel in channels:
+      self._channels[channel] = 0
   
   def __enter__(self) -> 'TDMSWriter':
     open_mode = "wb+" if self.mode == "w" else "ab+"
@@ -601,12 +610,13 @@ class TDMSWriter:
       meta_bytes.extend(Number.pack_u32(0)) # 0 properties (wrong I think)
 
     # Channel objects
-    for grp, ch, dtype in self._channels:
+    for channel, ch_samples in self._channels.items():
+      grp, ch, dtype = channel
       meta_bytes.extend(String.pack(f"/'{grp}'/'{ch}'"))
       meta_bytes.extend(Number.pack_u32(20)) # the following is just 20 bytes
       meta_bytes.extend(dtype.bytes())
       meta_bytes.extend(Number.pack_u32(1)) # Dimension = 1
-      meta_bytes.extend(Number.pack_u64(0)) # Initial n_values = 0
+      meta_bytes.extend(Number.pack_u64(ch_samples))
       meta_bytes.extend(Number.pack_u32(0)) # 0 properties
 
     # lead-in
@@ -620,6 +630,8 @@ class TDMSWriter:
     self._initialized = True
     
   def write_chunk(self, data:dict[str, TDMSArray]) -> None:
+  
+    metadata_objects:list[TDMSMetadataObject] = []
 
     # Check for tomfoolery
     if not self._stream:
@@ -630,10 +642,14 @@ class TDMSWriter:
     
     # Build payload
     payload = bytearray()
-    for group_name, channel_name, _ in self._channels:
+    for channel, sample_count in self._channels.items():
+      group_name, channel_name, dtype = channel
       channel_path = String.to_path(group_name, channel_name)
       array = data.get(channel_path)
       if not array: continue
+      if sample_count != len(array):
+        metadata_objects.append(TDMSMetadataObject(channel_path, TDMSRawDataLayout(dtype, 1, len(array), 0)))
+        self._channels[channel] = len(array)
       payload.extend(array.pack())
     
     if len(payload) == 0:
@@ -641,8 +657,15 @@ class TDMSWriter:
       return
     
     # lead-in
-    lead_in = TDMSLeadIn.from_flags(
-      TOCFlag.kTocRawData, len(payload), 0)
+    if len(metadata_objects) > 0:
+      metadata_bytes = TDMSMetadata(metadata_objects).to_bytes()
+      lead_in = TDMSLeadIn.from_flags(
+        [TOCFlag.kTocRawData, TOCFlag.kTocMetaData], len(payload) + len(metadata_bytes), len(metadata_bytes))
+    else:
+      metadata_bytes = b""
+      lead_in = TDMSLeadIn.from_flags(
+        TOCFlag.kTocRawData, len(payload), 0)
     self._stream.write(lead_in.to_bytes())
+    self._stream.write(metadata_bytes)
     self._stream.write(payload)
     self._stream.flush()
