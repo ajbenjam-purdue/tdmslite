@@ -268,6 +268,10 @@ class TDMSDataTypes(IntEnum):
       case _:
         raise NotImplementedError(f"Type {self} has not yet been added")
 
+  def bytes(self, big_endian:bool=False) -> bytes:
+    """Pack the instance into a u32"""
+    return Number.pack_u32(self.value, big_endian=big_endian)
+
   @property
   def n_bytes(self) -> int:
     """Get the expected size of a member of this type
