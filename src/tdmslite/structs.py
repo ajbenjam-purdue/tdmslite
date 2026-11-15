@@ -422,6 +422,23 @@ class TDMSArray(Sequence[Any], ABC):
 
     raise NotImplementedError(f"Unsupported data type: {data_type}")
 
+class EmptyTDMSArray(TDMSArray):
+  data_type = TDMSDataTypes.tdsTypeVoid
+  
+  def __len__(self) -> int:
+    return 0
+  
+  def __getitem__(self, index: int | slice[Any, Any, Any]) -> Any:
+    raise KeyError("EmptyTDMSArray has no items")
+  
+  def extend(self, other: TDMSArray) -> None:
+    pass
+  
+  def pack(self, big_endian: bool = False) -> bytes:
+    return b""
+  
+  def to_list(self) -> list[Any]:
+    return []
 
 # Helper classes
 class String:
