@@ -785,10 +785,16 @@ class Number:
       TDMSDataTypes.tdsTypeDoubleFloatWithUnit: 'd',
     }
     
-    def __init__(self, data_type: TDMSDataTypes, raw:array[float|int]|None=None) -> None:
+    def __init__(self, data_type: TDMSDataTypes, raw:array[float|int]|Iterable[float]|None=None) -> None:
       self.data_type = data_type
       self.typecode = self.TYPECODES[data_type]
-      self._raw:array[float|int] = raw if raw is not None else array(self.typecode)
+      self._raw:array[float|int]
+      if isinstance(raw, array):
+        self._raw = raw
+      elif not raw:
+        self._raw = array(self.typecode)
+      else:
+        self._raw = array(self.typecode, raw)
       
     def extend_from_bytes(self, data:bytes|bytearray, big_endian:bool) -> None:
       temp_arr:array[float|int] = array(self.typecode)
