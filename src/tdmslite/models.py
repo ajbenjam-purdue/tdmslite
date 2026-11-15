@@ -1,4 +1,4 @@
-from .structs import TOCFlag, TOCVersion, Number, \
+from .structs import TDMSConvertable, TOCFlag, TOCVersion, Number, \
   TDMSLeadInIntegrity, String, TDMSDataTypes, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   TDMSPyObject, TDMSArray, TDMS_pack
@@ -554,3 +554,52 @@ class TDMSWriter:
     if self._stream and not self._stream.closed:
       self._stream.flush()
       self._stream.close()
+  
+  def write_initial_segment(self, file_properties:dict[str, TDMSPyObject|TDMSConvertable]={}) -> None:
+    """Writes Segment 1 containing all metadata and channel definitions without actual data"""
+    assert self._stream is not None
+
+    meta_bytes = bytearray()
+
+    # Root, unique groups, channels
+    groups = list(dict.fromkeys(g for g, _, _ in self._channels))
+    total_objects = 1 + len(groups) + len(self._channels)
+    meta_bytes.extend(Number.pack_u32(total_objects))
+
+    # Root object
+    meta_bytes.extend(String.pack("/"))
+    meta_bytes.extend(b'\xFF\xFF\xFF\xFF') # No raw data
+    meta_bytes.extend(Number.pack_u32(len(file_properties))) # Count of properties
+    
+    for property_name, property_object in (file_properties).items():
+      meta_bytes.extend(String.pack(property_name))
+      property_object_bytes, property_object_type = TDMS_pack(property_object)
+      meta_bytes.extend(property_object_type.bytes())
+      meta_bytes.extend(property_object_bytes)
+
+    # Group objects
+    for grp in groups:
+      meta_bytes.extend(String.pack(f"/'{grp}'"))
+      meta_bytes.extend(b'\xFF\xFF\xFF\xFF') # No raw data
+      meta_bytes.extend(Number.pack_u32(0)) # 0 properties (wrong I think)
+
+    # Channel objects
+    for grp, ch, dtype in self._channels:
+      meta_bytes.extend(String.pack(f"/'{grp}'/'{ch}'"))
+      meta_bytes.extend(Number.pack_u32(20)) # the following is just 20 bytes
+      meta_bytes.extend(dtype.bytes())
+      meta_bytes.extend(Number.pack_u32(1)) # Dimension = 1
+      meta_bytes.extend(Number.pack_u64(0)) # Initial n_values = 0
+      meta_bytes.extend(Number.pack_u32(0)) # 0 properties
+
+    # lead-in
+    lead_in = TDMSLeadIn()
+    lead_in.members = [TOCFlag.kTocMetaData, TOCFlag.kTocNewObjList]
+    lead_in.version = TOCVersion.TDMS_2
+    lead_in.next_segment = len(meta_bytes)
+    lead_in.raw_data_offset = len(meta_bytes)
+    self._stream.write(lead_in.to_bytes())
+    self._stream.write(meta_bytes)
+    self._stream.flush()
+
+    self._initialized = True
