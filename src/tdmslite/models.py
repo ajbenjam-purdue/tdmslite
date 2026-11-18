@@ -3,7 +3,6 @@ from .structs import TDMSConvertable, TOCFlag, TOCVersion, Number, \
   TDMSMetadataObject, TDMSRawDataLayout, \
   EmptyTDMSArray, TDMSPyObject, TDMSArray, TDMS_pack
 from typing import BinaryIO, Any, Generator, Iterable, Literal
-import tkinter, tkinter.filedialog
 from logging import getLogger
 from pathlib import Path
 
@@ -220,12 +219,27 @@ class TDMSChannel:
       return EmptyTDMSArray()
     return self._data
   
-  def add_data(self, chunk:TDMSArray) -> None:
+  def add(self, chunk:TDMSArray) -> None:
+    """Add an array of data to the channel object
+
+    Args:
+      chunk (TDMSArray): The array to attempt to add
+
+    Raises:
+      TypeError: Raised if the channel already has data and the new data type does not match the channel's data type
+    """
     
     # If no data exists, set the data
-    if self._data:
+    if not self._data:
+      self._data = chunk
+      self.data_type = chunk.data_type
+      return
+    
+    if self.data_type == chunk.data_type:
       self._data.extend(chunk)
-    else: self._data = chunk
+      return
+    
+    raise TypeError(f"Cannot add data of type {chunk.data_type} to channel with existing data of type {self.data_type}")
   
   def __len__(self) -> int:
     return len(self.data) if self.data else 0
@@ -248,9 +262,18 @@ class TDMSGroup:
   """
   
   def __init__(self, name: str) -> None:
+    
     self.name: str = name
+    """The name the channel resides under
+    """
+    
     self.properties: dict[str,TDMSPyObject] = {}
+    """The properties map of string keys to convertible (TDMSPyObject) values
+    """
+    
     self.channels: dict[str, TDMSChannel] = {}
+    """The channel map of channel names (not paths) to TDMSChannel objects
+    """
 
   def get(self, channel_name:str) -> TDMSChannel | None:
     try:
@@ -262,6 +285,14 @@ class TDMSGroup:
     if channel_name in self.channels:
       return self.channels[channel_name]
     raise KeyError(f"Channel \"{channel_name}\" not in group \"{self.name}\"")
+  
+  def add(self, channel:TDMSChannel) -> None:
+    """Add the specified channel to the group
+
+    Args:
+      channel (TDMSChannel): The channel to add to the group
+    """
+    self.channels[channel.name] = channel
 
   def __iter__(self) -> Generator[TDMSChannel]:
     for channel in self.channels.values():
@@ -284,10 +315,17 @@ class TDMSSegment:
 
     # Lead-in
     self.lead_in = TDMSLeadIn.from_stream(self.stream)
+    """The segment's lead in bytes, translated
+    """
+    
     if self.lead_in.integrity == TDMSLeadInIntegrity.ERROR or \
      self.lead_in.integrity == TDMSLeadInIntegrity.DONE : return
 
     # Metadata
+    self.metadata:TDMSMetadata|None
+    """The segment's metadata object, if any exists
+    """
+    
     if self.lead_in.has_metadata:
       self.metadata = TDMSMetadata.from_stream(self.stream, self.lead_in.big_endian, channel_states)
       self.objects = self.metadata.objects
@@ -297,6 +335,9 @@ class TDMSSegment:
 
     # Rawdata
     self.raw_chunks: dict[str, TDMSArray] = {}
+    """The map of channel paths to plain arrays
+    """
+    
     if self.lead_in.has_rawdata:
       
       # Seek to raw data and read
@@ -337,19 +378,31 @@ class TDMSSegment:
     return total_read_bytes
 
 class TDMSDocument:
-  """Physical Document container class to manage the ingestion of data from a .tdms file.
-  If a file is on disk, use the constructor `TDMSDocument.from_file()` to load it. 
-  If a file is trustworthy and present in a buffered binary IO reader, use the constructor `TDMSDocument()` directly. 
+  """Physical Document container class to manage the ingestion of data from a .tdms file
   """
   
   def __init__(self) -> None:
     """Create an empty in-place TDMSDocument
     """
+    
     self.properties: dict[str, TDMSPyObject] = {}
+    """A map of property names to their values. Values can be any mappable (TDMSPyObject) type
+    """
+    
     self.groups: dict[str, TDMSGroup] = {}
+    """A map of group names to their TDMSGroup objects
+    """
+  
+  def add(self, group:TDMSGroup) -> None:
+    """Add the specified group to the document
+
+    Args:
+        group (TDMSGroup): The group to add to the document
+    """
+    self.groups[group.name] = group
   
   @classmethod
-  def from_file(cls, path:str|Path|None=None) -> 'TDMSDocument':
+  def from_file(cls, path:str|Path) -> 'TDMSDocument':
     """Load a TDMS document into memory from the provided path.
 
     Args:
@@ -365,13 +418,7 @@ class TDMSDocument:
     """
     
     if not path:
-      path = tkinter.filedialog.askopenfilename(
-        defaultextension=".tdms",
-        filetypes=[("TDMS File", ".tdms")],
-        title="Select the TDMS file to load"
-      )
-      if path == "":
-        raise FileNotFoundError("No file specified")
+      raise FileNotFoundError("No file specified")
     
     path = Path(path).resolve()
     if path.suffix.lower() != '.tdms':
@@ -382,7 +429,8 @@ class TDMSDocument:
     file = TDMSDocument()
     try:
       with open(Path(path).resolve(), 'rb') as stream:
-        # Persistant state
+        
+        # Persistent state
         channel_states: dict[str, TDMSRawDataLayout] = {}
         active_objects: list[TDMSMetadataObject] = []
     
@@ -401,14 +449,21 @@ class TDMSDocument:
     
           # Update Document hierarchy
           for obj in segment.objects:
+            
             group_name, chan_name = String.parse_path(obj.path)
             obj_path = f"/'{group_name}'/'{chan_name}'/" if chan_name else f"/'{group_name}'/" if group_name else "/"
             logger.info(f"Updating {obj_path}...")
+            
+            # Overall file properties
             if group_name is None and chan_name is None:
               file.properties.update(obj.properties)
+              
+            # Group properties
             elif group_name and not chan_name:
               group = file.groups.setdefault(group_name, TDMSGroup(group_name))
               group.properties.update(obj.properties)
+              
+            # Channel properties
             elif group_name and chan_name:
               group = file.groups.setdefault(group_name, TDMSGroup(group_name))
               dtype = obj.raw_layout.data_type if obj.raw_layout else None
@@ -416,24 +471,40 @@ class TDMSDocument:
                 group.channels[chan_name] = TDMSChannel(chan_name, obj.path, dtype)
     
               group.channels[chan_name].properties.update(obj.properties)
+              
             logger.info(f"Updated {obj_path} with {len(obj.properties)} properties")
+          
           # Add segment's chunks
           for path, chunk in segment.raw_chunks.items():
             group_name, chan_name = String.parse_path(path)
+            
+            # Is data
             if group_name and chan_name:
-              file.groups[group_name].channels[chan_name].add_data(chunk)
+              file.groups[group_name].channels[chan_name].add(chunk)
               logger.info(f"Updated {path} with {len(chunk)} items")
     
           # EOF?
           if segment.lead_in.next_segment == 0xFFFFFFFFFFFFFFFF:
             logger.info(f"Segment contains EOF")
             break
+          
+          # Move to next segment
           stream.seek(seg_start + 28 + segment.lead_in.next_segment)
+          
     except Exception as e:
       raise RuntimeError(f"Encountered exception while loading TMDS file: {e}")
+    
     return file
 
   def get(self, group_name:str) -> TDMSGroup | None:
+    """Get the group with the provided name, if one exists. If one does not exist, return None
+
+    Args:
+        group_name (str): The case-sensitive group name to search for
+
+    Returns:
+        TDMSGroup | None: The resulting TDMSGroup or None, contingent on the data provided
+    """
     try:
       return self[group_name]
     except:
@@ -509,19 +580,11 @@ class TDMSDocument:
     
     return lead_in.to_bytes() + meta_bytes + raw_bytes
   
-  def to_file(self, destination:Path|str|None=None, exist_ok:bool=False) -> None:
+  def to_file(self, destination:Path|str, exist_ok:bool=False) -> None:
     
-    if not destination:
-      
-      destination = tkinter.filedialog.asksaveasfilename(
-        defaultextension=".tdms",
-        filetypes=[("TDMS File", ".tdms")],
-        title="Select the TDMS file to load"
-      )
-      
-      if destination == "":
-        destination = Path("./temp.tdms").resolve()
-        logger.error(f"No destination provided to TDMSDocument.to_file(). Defaulting to {destination}.")
+    if destination == "":
+      destination = Path("./temp.tdms").resolve()
+      logger.error(f"No destination provided to TDMSDocument.to_file(). Defaulting to {destination}.")
         
     destination = Path(destination).resolve().with_suffix(".tdms")
     if not exist_ok and destination.exists():
